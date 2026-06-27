@@ -1,0 +1,220 @@
+"""HTTP API + the single-page interface."""
+from __future__ import annotations
+
+import asyncio
+import base64
+import contextlib
+import os
+import logging
+import secrets
+from typing import Optional
+
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
+
+from . import romm
+from .engine import Engine, parse_types
+
+log = logging.getLogger("dircrawl")
+
+STATIC = os.path.join(os.path.dirname(__file__), "static")
+
+
+def node_json(engine: Engine, tree: dict, rules: dict, path: str) -> dict:
+    n = tree[path]
+    return {"path": n.path, "name": n.name or "lolroms.com", "files": n.files, "bytes": n.bytes,
+            "newest": n.newest, "dirs": n.dirs, "has_children": bool(n.children),
+            "own_files": n.own_files, "synced": n.synced, "synced_bytes": n.synced_bytes,
+            "failed": n.failed, "error": n.error, "scanned": n.scanned,
+            "state": engine.catalog.state_of(path, rules)}
+
+
+def create_app(engine_factory, password: Optional[str] = None, on_restart=None) -> FastAPI:
+    """on_restart: called by POST /api/restart to restart the whole program (see __main__)."""
+    holder: dict = {}
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app):
+        engine = engine_factory()
+        holder["engine"] = engine
+        engine.scheduler = asyncio.create_task(engine.scheduler_loop())
+        try:
+            yield
+        finally:
+            engine.shutdown()
+            engine.scheduler.cancel()
+            if engine.task:
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(engine.task, 10)
+            engine.catalog.close()
+
+    app = FastAPI(title="lolroms-sync", lifespan=lifespan, docs_url=None, redoc_url=None)
+
+    def eng() -> Engine:
+        return holder["engine"]
+
+    if password:
+        @app.middleware("http")
+        async def basic_auth(request: Request, call_next):
+            if request.url.path == "/api/health":          # Docker health check
+                return await call_next(request)
+            header = request.headers.get("authorization", "")
+            ok = False
+            if header.lower().startswith("basic "):
+                try:
+                    _, _, given = base64.b64decode(header[6:]).decode().partition(":")
+                    ok = secrets.compare_digest(given, password)
+                except Exception:
+                    ok = False
+            if not ok:
+                return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="lolroms-sync"'})
+            return await call_next(request)
+
+    @app.get("/")
+    async def index():
+        return FileResponse(os.path.join(STATIC, "index.html"), headers={"Cache-Control": "no-cache"})
+
+    app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+    @app.get("/api/status")
+    async def status(log_since: int = 0):
+        return eng().status(log_since)
+
+    @app.get("/api/tree")
+    async def tree(path: str = ""):
+        e = eng()
+        types = parse_types(e.catalog.settings()["types"])
+        t = e.catalog.tree(types)
+        if path not in t:
+            raise HTTPException(404, "no such folder")
+        rules = e.catalog.rules()
+        return {"node": node_json(e, t, rules, path),
+                "children": [node_json(e, t, rules, c) for c in t[path].children]}
+
+    @app.get("/api/search")
+    async def search(q: str = ""):
+        e = eng()
+        types = parse_types(e.catalog.settings()["types"])
+        t = e.catalog.tree(types)
+        rules = e.catalog.rules()
+        return {"results": [node_json(e, t, rules, p) for p in e.catalog.search(q) if p in t]}
+
+    @app.get("/api/files")
+    async def files(path: str = "", limit: int = 2000):
+        e = eng()
+        with e.catalog.lock:
+            rows = e.catalog.db.execute(
+                "SELECT name, rel, ext, date, size, local, local_size, error FROM files WHERE dir=? "
+                "ORDER BY name COLLATE NOCASE LIMIT ?", (path, limit)).fetchall()
+            total = e.catalog.db.execute("SELECT COUNT(*) FROM files WHERE dir=?", (path,)).fetchone()[0]
+        keys = ("name", "rel", "ext", "date", "size", "local", "local_size", "error")
+        return {"total": total, "files": [dict(zip(keys, r)) for r in rows]}
+
+    @app.post("/api/select")
+    async def select(path: str = Body(...), include: bool = Body(...)):
+        e = eng()
+        if path not in e.catalog.tree():
+            raise HTTPException(404, "no such folder")
+        e.catalog.select(path, include)
+        return {"ok": True}
+
+    @app.post("/api/selection/clear")
+    async def clear_selection():
+        eng().catalog.clear_selection()
+        return {"ok": True}
+
+    @app.post("/api/scan")
+    async def scan(root: str = Body("", embed=True)):
+        if not eng().start("scan", root):
+            raise HTTPException(409, "already busy")
+        return {"ok": True}
+
+    @app.post("/api/sync")
+    async def sync():
+        if not eng().start("sync"):
+            raise HTTPException(409, "already busy")
+        return {"ok": True}
+
+    @app.post("/api/stop")
+    async def stop():
+        eng().stop()
+        return {"ok": True}
+
+    @app.get("/api/settings")
+    async def get_settings():
+        e = eng()
+        return {"settings": e.catalog.settings(), "data_locked": e.data_locked}
+
+    @app.post("/api/settings")
+    async def set_settings(values: dict = Body(...)):
+        try:
+            return {"settings": eng().update_settings(values), "data_locked": eng().data_locked}
+        except (ValueError, Exception) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @app.get("/api/history")
+    async def history():
+        return {"history": eng().catalog.history(20)}
+
+    # ---------------------------------------------------------------- RomM mapping
+    def romm_view(e: Engine) -> dict:
+        s = e.catalog.settings()
+        opt = romm.options_from(s)
+        m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])), opt)
+        return {"options": {k: opt[k] for k in ("host_path", "library", "only_synced", "variants")},
+                "rows": m.rows(), "platforms": m.platforms, "firmware": m.firmware,
+                "warnings": m.warnings(), "summary": m.summary(), "slugs": [{"slug": k, "name": v[0], "family": v[1], "kind": v[2]}
+                          for k, v in sorted(romm.PLATFORMS.items())],
+                "outputs": {"compose": m.compose(), "unraid": m.unraid(), "config": m.config_yml()}}
+
+    @app.get("/api/romm")
+    async def romm_get():
+        return romm_view(eng())
+
+    @app.post("/api/romm/options")
+    async def romm_options(values: dict = Body(...)):
+        e = eng()
+        cur = dict(e.catalog.settings().get("romm") or {})
+        for k in ("host_path", "library"):
+            if k in values:
+                cur[k] = str(values[k] or "").strip()
+        for k in ("only_synced", "variants"):
+            if k in values:
+                cur[k] = bool(values[k])
+        if not cur.get("library"):
+            cur.pop("library", None)
+        e.catalog.save_settings({"romm": cur})
+        return romm_view(e)
+
+    @app.post("/api/romm/map")
+    async def romm_map(path: str = Body(...), action: str = Body("")):
+        e = eng()
+        try:
+            action = romm.check_action(action)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        cur = dict(e.catalog.settings().get("romm") or {})
+        mapping = dict(cur.get("map") or {})
+        if action:
+            mapping[path] = action
+        else:
+            mapping.pop(path, None)
+        cur["map"] = mapping
+        e.catalog.save_settings({"romm": cur})
+        return romm_view(e)
+
+    # ---------------------------------------------------------------- restart
+    @app.post("/api/restart")
+    async def restart():
+        if on_restart is None:
+            raise HTTPException(501, "restart is not available when started this way")
+        log.info("Restarting Rom Sync...")
+        asyncio.get_running_loop().call_later(0.3, on_restart)
+        return {"ok": True}
+
+    @app.get("/api/health")
+    async def health():
+        return {"ok": True}
+
+    return app
