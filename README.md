@@ -63,24 +63,21 @@ files it writes behave like the rest of your shares.
 
 ### Docker image for Unraid
 
-Unraid installs containers from an image registry, so the image has to be published once:
+The code lives on GitHub; the image is built on the Unraid server itself, so no image registry
+(Docker Hub, ghcr.io) is involved.
 
-- **Easiest: GitHub.** Push this project to a GitHub repository. The included workflow
-  (`.github/workflows/docker.yml`) builds the image on every push and publishes it as
-  `ghcr.io/<your-github-name>/lolroms-sync:latest`. In the package settings on GitHub, set its
-  visibility to public, or log Unraid in to ghcr.io.
-- **Docker Hub too:** create an access token on Docker Hub (Account settings > Personal access
-  tokens, Read & Write). In the GitHub repository under Settings > Secrets and variables >
-  Actions, add the variable `DOCKERHUB_USERNAME` (your Docker Hub name) and the secret
-  `DOCKERHUB_TOKEN`. From the next push the image is also published as
-  `<your-docker-hub-name>/lolroms-sync:latest`. Tag a release (`git tag v1.2.0 && git push --tags`)
-  to also get a `1.2.0` tag.
-- **Or build on the server:** copy the project to Unraid and run `docker build -t lolroms-sync .`
-  in its folder. Then use `lolroms-sync` as the repository in the template.
+1. Copy `docker/unraid-update.sh` to `/path/to/appdata/rom-sync/` on the server. If the GitHub
+   repository is private, also put a read-only GitHub token in `/path/to/appdata/rom-sync/github-token`
+   (fine-grained token, this repository only, *Contents: Read*).
+2. In the Unraid terminal: `bash /path/to/appdata/rom-sync/unraid-update.sh`. It downloads the code
+   from GitHub, builds the image, and starts the `rom-sync` container on port 8484 with
+   `/path/to/appdata/rom-sync/config` as `/config` and `/path/to/roms` as `/data`
+   (change `DATA=`, `PORT=` ... at the top of the script).
+3. To update after pushing changes to GitHub, run the same command again (the *User Scripts* plugin
+   can give it a button). Catalog, ticks and downloads are kept.
 
-Then copy `unraid/lolroms-sync.xml` to `/boot/config/plugins/dockerMan/templates-user/` and replace
-`YOUR-GITHUB-NAME`. Add the container from **Docker > Add Container > Template: lolroms-sync** and
-set **Downloads** to your share.
+The GitHub workflow in `.github/workflows/docker.yml` can still publish an image to ghcr.io / Docker
+Hub, but only when started by hand.
 
 `docker-compose.yml` does the same for any Docker host: run `docker compose up -d --build`.
 
