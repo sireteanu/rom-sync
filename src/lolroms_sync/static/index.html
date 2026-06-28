@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rom Sync</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='3' width='22' height='26' rx='3' fill='%235b3f9e'/%3E%3Crect x='9' y='7' width='14' height='9' rx='1' fill='%23e8e5ee'/%3E%3Crect x='9' y='22' width='14' height='3' fill='%23e8e5ee'/%3E%3C/svg%3E">
+<script>
+  // apply the saved theme before anything is drawn (dark unless you picked light)
+  try { if (localStorage.getItem("theme") === "light") document.documentElement.dataset.theme = "light"; } catch (e) {}
+</script>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg class="cart" viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="3" width="22" height="26" rx="3"/><rect class="lbl" x="9" y="7" width="14" height="9" rx="1"/><rect class="lbl" x="9" y="22" width="14" height="3"/></svg>
+    <h1>Rom Sync</h1>
+    <span id="jobpill" class="pill idle">Idle</span>
+  </div>
+  <div class="actions">
+    <button id="btn-scan" class="btn" title="Read every folder listing on lolroms.com (no files are downloaded)">Scan site</button>
+    <button id="btn-sync" class="btn primary" title="Download new, incomplete and changed files in the ticked folders">Sync selected</button>
+    <button id="btn-stop" class="btn danger" disabled>Stop</button>
+    <button id="btn-romm" class="btn" title="Show your synced folders to RomM, without moving them">RomM</button>
+    <button id="btn-restart" class="btn icon" title="Restart Rom Sync (a running sync carries on afterwards)" aria-label="Restart Rom Sync">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 7.75 6h-2.1A6 6 0 1 1 12 6c1.6 0 3.1.6 4.2 1.7L13 11h7V4l-2.4 2.4A7.9 7.9 0 0 0 12 4Z"/></svg>
+    </button>
+    <button id="btn-theme" class="btn icon theme-toggle" title="Switch between dark and light" aria-label="Switch between dark and light">
+      <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+      <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>
+    </button>
+    <button id="btn-settings" class="btn icon" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.6 4.9-.1-2.8 2-1.6-2-3.4-2.4.9-2.4-1.4L15.3 2h-3.9l-.4 2.6-2.4 1.4-2.4-.9-2 3.4 2 1.6v2.8l-2 1.6 2 3.4 2.4-.9 2.4 1.4.4 2.6h3.9l.4-2.6 2.4-1.4 2.4.9 2-3.4-2-1.6Z"/></svg>
+    </button>
+  </div>
+</header>
+
+<section class="storage" aria-label="Selection">
+  <div class="storage-text">
+    <span id="sel-summary">Nothing selected yet</span>
+    <span id="cat-summary" class="muted"></span>
+  </div>
+  <div class="bar" id="storage-bar" role="img" aria-label="Selected, synced and remaining size">
+    <div class="seg synced" id="bar-synced"></div><div class="seg todo" id="bar-todo"></div>
+  </div>
+  <div class="legend">
+    <span><i class="sw synced"></i><span id="lg-synced">Synced 0 B</span></span>
+    <span><i class="sw todo"></i><span id="lg-todo">To download 0 B</span></span>
+    <span id="lg-dest" class="muted"></span>
+  </div>
+</section>
+
+<main class="layout">
+  <section class="browser" aria-label="Folders">
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Find a folder, e.g. Game Boy" autocomplete="off" aria-label="Find a folder">
+      <button id="btn-clear-sel" class="btn small ghost" title="Untick everything">Clear selection</button>
+    </div>
+    <div class="cols">
+      <button class="sort c-name" data-sort="name" title="Sort by name">Folder</button><button class="sort c-num c-files" data-sort="files" title="Sort by number of files">Files</button><button class="sort c-num c-size" data-sort="bytes" title="Sort by size">Size</button>
+      <button class="sort c-date" data-sort="newest" title="Sort by the newest file's date">Updated</button><button class="sort c-meter" data-sort="synced" title="Sort by how much is synced">Synced</button>
+    </div>
+    <div id="tree" class="tree" role="tree"></div>
+    <div id="empty" class="empty" hidden>
+      <h2>Start with a scan</h2>
+      <p>The catalog is empty. A scan reads every folder listing on lolroms.com, without downloading any files,
+         so you can see the whole site here and tick what you want to keep.</p>
+      <button class="btn primary" id="btn-scan-empty">Scan site</button>
+    </div>
+  </section>
+
+  <aside class="activity" aria-label="Activity">
+    <div class="card" id="job-card">
+      <h2>Activity</h2>
+      <p id="job-line" class="muted">No job running.</p>
+      <div id="eta-box" class="eta" hidden>
+        <div class="eta-head"><span class="muted small">This sync</span><span id="eta-total" class="small"></span></div>
+        <div class="eta-main"><span class="muted small">Time remaining</span><b id="eta-time">-</b></div>
+        <div class="bar thin" role="img" aria-label="Progress of this sync"><div class="seg synced" id="eta-bar"></div></div>
+        <div id="eta-sub" class="muted small"></div>
+      </div>
+      <div id="scan-stats" class="stats" hidden></div>
+      <div id="sync-stats" class="stats" hidden></div>
+      <div id="downloads" class="downloads"></div>
+      <p id="next-run" class="muted small"></p>
+    </div>
+    <div class="card log-card">
+      <h2>Log</h2>
+      <ol id="log" class="log" aria-live="polite"></ol>
+    </div>
+  </aside>
+</main>
+
+<dialog id="files-dlg" class="dlg wide">
+  <form method="dialog" class="dlg-head"><h2 id="files-title">Files</h2><button class="btn icon" aria-label="Close">✕</button></form>
+  <p id="files-sub" class="muted small"></p>
+  <div class="files-wrap"><table class="files"><thead><tr><th>File</th><th>Updated</th><th>Size</th><th>Status</th></tr></thead><tbody id="files-body"></tbody></table></div>
+</dialog>
+
+<dialog id="settings-dlg" class="dlg">
+  <form id="settings-form" method="dialog">
+    <div class="dlg-head"><h2>Settings</h2><button class="btn icon" value="cancel" aria-label="Close">✕</button></div>
+    <label class="field"><span>Download folder</span>
+      <input name="data_dir" required>
+      <small id="data-hint">Synced files are saved here, keeping the site's folder structure.</small></label>
+    <label class="field"><span>File types</span>
+      <select name="types_mode"><option value="archives">Archives (zip, 7z, rar …)</option><option value="all">Everything the site lists</option><option value="custom">Only these extensions</option></select>
+      <input name="types_custom" placeholder=".7z, .zip" hidden></label>
+    <div class="row2">
+      <label class="field"><span>Parallel downloads</span>
+        <select name="parallel_mode"><option value="auto">As many as the server allows</option><option value="fixed">Fixed number</option></select></label>
+      <label class="field"><span id="par-label">Upper limit</span><input name="parallel_n" type="number" min="1" max="64"></label>
+    </div>
+    <div class="row2">
+      <label class="field"><span>Speed limit</span><input name="max_rate" placeholder="Unlimited, or e.g. 10M"></label>
+      <label class="field"><span>Keep free on disk</span><input name="min_free" placeholder="2G"></label>
+    </div>
+    <div class="row2">
+      <label class="field"><span>Sync automatically every</span><span class="unit"><input name="sync_every_hours" type="number" min="0" step="1"> hours</span><small>0 turns it off.</small></label>
+      <label class="field"><span>Full site scan every</span><span class="unit"><input name="full_scan_every_days" type="number" min="0" step="1"> days</span><small>Picks up new folders.</small></label>
+    </div>
+    <label class="check"><input type="checkbox" name="refresh_before_sync"> Re-read the ticked folders' listings before each sync</label>
+    <label class="check"><input type="checkbox" name="resume_interrupted"> Continue an unfinished sync when the app starts again (after a restart, crash or reboot)</label>
+    <label class="check"><input type="checkbox" name="check_remote"> Ask the server about every file I already have (exact, but one request per file)</label>
+    <p id="settings-error" class="error" hidden></p>
+    <div class="dlg-foot"><button class="btn ghost" value="cancel">Cancel</button><button class="btn primary" id="settings-save" value="save">Save settings</button></div>
+  </form>
+</dialog>
+
+<dialog id="romm-dlg" class="dlg xwide">
+  <form method="dialog" class="dlg-head"><h2>RomM library</h2><button class="btn icon" aria-label="Close">✕</button></form>
+  <p class="muted small">RomM sees each synced folder under its platform name through read-only mounts that you add to
+    <b>RomM's own container</b> (not Rom Sync's). Nothing is moved or copied, so syncing keeps working. Add the mounts
+    to RomM, merge the config into RomM's <code>config.yml</code>, restart RomM and scan its library.</p>
+  <div class="row2">
+    <label class="field"><span>Download folder on the server</span><input id="romm-host" placeholder="/path/to/roms">
+      <small>The folder Rom Sync saves to, as the RomM container's host sees it.</small></label>
+    <label class="field"><span>RomM library in its container</span><input id="romm-lib" placeholder="/romm/library">
+      <small>Leave as is unless you changed RomM's library path.</small></label>
+  </div>
+  <label class="check"><input type="checkbox" id="romm-only"> Only folders with synced files (Docker would create missing ones empty)</label>
+  <label class="check"><input type="checkbox" id="romm-var"> Include subfolders such as T-En, hacks and add-ons in their platform</label>
+  <ul id="romm-warn" class="warnings"></ul>
+  <div class="romm-grid">
+    <section>
+      <div class="romm-bar">
+        <h3 id="romm-count">Folders</h3>
+        <select id="romm-filter" aria-label="Show">
+          <option value="todo">Needs a platform</option><option value="used">In RomM</option><option value="all">All folders</option>
+        </select>
+        <input id="romm-find" type="search" placeholder="Find" aria-label="Find a folder">
+      </div>
+      <div class="romm-wrap"><table class="files romm"><thead><tr><th>Folder</th><th>Files</th><th>RomM platform</th><th>Result</th></tr></thead>
+        <tbody id="romm-body"></tbody></table></div>
+      <datalist id="romm-slugs"></datalist>
+      <p class="muted small">Type a RomM platform (e.g. <code>snes</code>), <code>merge</code> (into the platform above),
+        <code>bios:psx</code> (firmware) or <code>skip</code>. Clear it to go back to the default.</p>
+    </section>
+    <section>
+      <div class="romm-bar">
+        <div class="tabs" role="tablist">
+          <button class="tab on" data-out="compose" role="tab">RomM compose</button>
+          <button class="tab" data-out="unraid" role="tab">RomM on Unraid</button>
+          <button class="tab" data-out="config" role="tab">config.yml</button>
+          <button class="tab" data-out="list" role="tab">RomM platforms</button>
+        </div>
+        <button id="romm-copy" class="btn small">Copy</button>
+      </div>
+      <p id="romm-help" class="muted small"></p>
+      <pre id="romm-out" class="out"></pre>
+      <div id="romm-list" hidden>
+        <input id="romm-list-find" type="search" placeholder="Find a platform, e.g. famicom or Sega" aria-label="Find a RomM platform">
+        <div class="romm-wrap"><table class="files romm-all"><thead><tr><th>RomM platform</th><th>Name</th><th>Maker</th><th>Your folders</th></tr></thead>
+          <tbody id="romm-list-body"></tbody></table></div>
+      </div>
+    </section>
+  </div>
+</dialog>
+
+<div id="restarting" class="restarting" hidden><div><b>Restarting Rom Sync…</b><p class="muted">This page reloads when it's back.</p></div></div>
+
+<template id="row-tpl">
+  <div class="node" role="treeitem">
+    <div class="row">
+      <button class="twisty" aria-label="Expand"></button>
+      <input type="checkbox" class="tick">
+      <span class="name"></span>
+      <span class="c-num files"></span>
+      <span class="c-num size"></span>
+      <span class="c-date date"></span>
+      <span class="c-meter"><span class="meter"><span class="fill"></span></span><span class="pct"></span></span>
+      <button class="info" title="Show files in this folder" aria-label="Show files">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      </button>
+    </div>
+    <div class="kids" role="group" hidden></div>
+  </div>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
