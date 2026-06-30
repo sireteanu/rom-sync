@@ -1,4 +1,4 @@
-# Builds the Docker image on every push to main and on version tags (v1.2.0 ...) and publishes it to
+# Optional: builds the Docker image in the cloud and publishes it to
 #   - GitHub Container Registry: ghcr.io/<github-name>/lolroms-sync   (always)
 #   - Docker Hub:                docker.io/<docker-hub-name>/lolroms-sync
 #     only once these are set in the GitHub repo (Settings > Secrets and variables > Actions):
@@ -6,10 +6,9 @@
 #       Secrets tab:   DOCKERHUB_TOKEN    = a Docker Hub access token (Read & Write)
 # Unraid's template pulls one of these images.
 name: Docker image
+# Not run on every push: the image is built on the Unraid server (docker/unraid-update.sh).
+# Start it by hand (Actions > Docker image > Run workflow) if you ever want a published image.
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
 jobs:

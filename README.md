@@ -61,6 +61,12 @@ files it writes behave like the rest of your shares.
 | `TZ` | (none) | Time zone for file dates and the schedule, for example `America/Toronto` |
 | `LOLROMS_PASSWORD` | (none) | Ask for a password in the browser |
 
+### Publishing changes
+
+`publish.bat` (Windows) saves every change in the folder, pulls anything new from GitHub, pushes,
+and creates a GitHub release `v<version>` the first time a version from `pyproject.toml` is pushed
+(release notes are generated from the commits). Then click **Compose Up** on Unraid.
+
 ### Docker image for Unraid
 
 The code lives on GitHub; the image is built on the Unraid server itself, so no image registry
