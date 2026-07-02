@@ -111,6 +111,15 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
 7. **Politeness**: `Limiter` halves parallelism and doubles the delay on 429/503/timeouts/slow
    responses and recovers gradually. Downloads default to 2 at a time. Respect robots.txt by default.
 
+## Publishing (GitHub: sireteanu/rom-sync)
+- Claude pushes to `main` from this session; the user's Unraid server builds the image from GitHub
+  (`unraid/docker-compose.yml`, Compose Manager, `pull_policy: build`) - after a push the user
+  clicks Compose Up. On Windows the user can run `publish.bat` (commit + pull --rebase + push).
+- Releases: bump `version` in `pyproject.toml` and `src/lolroms_sync/__init__.py`, push; the
+  `Release` workflow creates `v<version>` with generated notes. (This session can't call the
+  releases API directly.) `docker.yml` (registry image) runs only when started by hand.
+- `git fetch origin main` before pushing from a shallow clone.
+
 ## Conventions
 - Dependencies: httpx[http2], selectolax, rich, fastapi, uvicorn (+ pytest/pyflakes for dev). Ask before adding more.
 - Log through `logging.getLogger("dircrawl")`; the CLI decides rich vs plain output. Never `print`
