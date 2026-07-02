@@ -82,12 +82,16 @@
       </div>
       <div id="scan-stats" class="stats" hidden></div>
       <div id="sync-stats" class="stats" hidden></div>
-      <div id="downloads" class="downloads"></div>
+      <p id="sync-paused" class="error small" hidden></p>
       <p id="next-run" class="muted small"></p>
     </div>
     <div class="card log-card">
       <h2>Log</h2>
       <ol id="log" class="log" aria-live="polite"></ol>
+    </div>
+    <div class="card dl-card" id="dl-card" hidden>
+      <h2>Downloading <span id="dl-count" class="muted small"></span></h2>
+      <div id="downloads" class="downloads"></div>
     </div>
   </aside>
 </main>

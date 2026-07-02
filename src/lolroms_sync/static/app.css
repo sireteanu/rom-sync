@@ -165,11 +165,16 @@ h2 { font-size: 15px; font-weight: 600; }
 .stats .warn { color: var(--amber); }
 .stats .bad { color: var(--red); }
 .downloads { display: grid; gap: 8px; }
-.dl { font-size: 12.5px; }
-.dl .dl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dl .meter { width: 100%; height: 5px; }
-.dl .meter .fill { background: var(--grape); }
-.dl .dl-size { color: var(--ink-2); font-size: 11.5px; }
+.dl { font-size: 12.5px; min-width: 0; }
+.dl-top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.dl .dl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl .dl-pct { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; font-size: 12px; }
+.dl .dl-dir { color: var(--ink-2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl .meter { display: block; width: 100%; height: 6px; margin: 3px 0 2px; }
+.dl .meter .fill { background: var(--grape); transition: width .9s linear; }
+.dl .dl-size { color: var(--ink-2); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.dl-card .downloads { max-height: 420px; overflow: auto; padding-right: 2px; }
+.dl-card[hidden] { display: none; }
 .log { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow: auto; font-size: 12px; display: grid; gap: 3px; }
 .log li { color: var(--ink-2); overflow-wrap: anywhere; }
 .log li time { color: var(--ink-2); opacity: .7; margin-right: 6px; }

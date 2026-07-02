@@ -354,8 +354,7 @@ function renderStatus(st) {
   } else sc.hidden = true;
 
   const sy = $("#sync-stats");
-  const dls = $("#downloads");
-  dls.innerHTML = "";
+  renderDownloads(st.sync, syncing);
   if (st.sync) {
     const s = st.sync;
     const uptodate = (s["up to date"] || 0) + (s["already in folder"] || 0);
@@ -363,24 +362,11 @@ function renderStatus(st) {
       ["Resumed", num(s.resumed)], ["Up to date", num(uptodate)],
       ["Failed", num(s.failed), s.failed ? "bad" : ""], ["Downloaded", bytes(s.bytes)],
       ["Speed", syncing ? bytes(s.speed) + "/s" : "-"],
-      ["Parallel", syncing ? `${s.running} (${s.gate})` : "-"]]);
-    if (s.paused) {
-      const p = document.createElement("p");
-      p.className = "error small"; p.textContent = "Paused: " + s.paused;
-      dls.append(p);
-    }
-    for (const a of s.active || []) {
-      const d = document.createElement("div");
-      d.className = "dl";
-      const pct = a.total ? (100 * a.have / a.total) : 0;
-      d.innerHTML = `<div class="dl-name"></div><span class="meter"><span class="fill"></span></span><div class="dl-size"></div>`;
-      d.firstChild.textContent = a.rel.slice(a.rel.lastIndexOf("/") + 1);
-      d.firstChild.title = a.rel;
-      $(".fill", d).style.width = pct.toFixed(1) + "%";
-      $(".dl-size", d).textContent = a.total ? `${bytes(a.have)} of ${bytes(a.total)}` : bytes(a.have);
-      dls.append(d);
-    }
+      ["Parallel", syncing ? `${s.running} (${String(s.gate).replace("at --dl-max", "at your upper limit")})` : "-"]]);
   } else sy.hidden = true;
+  const paused = $("#sync-paused");
+  paused.hidden = !(st.sync && st.sync.paused);
+  if (!paused.hidden) paused.textContent = "Paused: " + st.sync.paused;
   renderEta(st, busy);
   $("#next-run").textContent = st.next_run ? `Next automatic sync at ${new Date(st.next_run * 1000).toLocaleString()}` : "";
 
@@ -405,6 +391,51 @@ function renderStatus(st) {
     refreshVisible();
   }
   wasBusy = busy;
+}
+
+/* files being downloaded right now: one row each, kept between polls so bars move smoothly */
+const dlRows = new Map();      // rel -> {el, have, t, speed}
+function renderDownloads(s, syncing) {
+  const card = $("#dl-card"), box = $("#downloads");
+  const active = (s && s.active) || [];
+  card.hidden = !syncing && !active.length;
+  if (card.hidden) { box.innerHTML = ""; dlRows.clear(); return; }
+  $("#dl-count").textContent = active.length ? `${active.length} ${active.length === 1 ? "file" : "files"}` : "";
+  const now = Date.now() / 1000, seen = new Set();
+  for (const a of active) {
+    seen.add(a.rel);
+    let r = dlRows.get(a.rel);
+    if (!r) {
+      const el = document.createElement("div");
+      el.className = "dl";
+      el.innerHTML = `<div class="dl-top"><span class="dl-name"></span><span class="dl-pct"></span></div>
+        <div class="dl-dir"></div><span class="meter"><span class="fill"></span></span><div class="dl-size"></div>`;
+      const slash = a.rel.lastIndexOf("/");
+      $(".dl-name", el).textContent = a.rel.slice(slash + 1);
+      $(".dl-dir", el).textContent = slash > 0 ? a.rel.slice(0, slash) : "";
+      el.title = a.rel;
+      r = { el, have: a.have, t: now, speed: 0 };
+      dlRows.set(a.rel, r);
+    } else if (now > r.t) {
+      const inst = Math.max(0, (a.have - r.have) / (now - r.t));
+      r.speed = r.speed ? r.speed * 0.6 + inst * 0.4 : inst;       // smoothed per-file speed
+      r.have = a.have; r.t = now;
+    }
+    box.append(r.el);                                               // keeps the server's order
+    const pct = a.total ? Math.min(100, 100 * a.have / a.total) : 0;
+    $(".fill", r.el).style.width = pct.toFixed(1) + "%";
+    $(".dl-pct", r.el).textContent = a.total ? Math.floor(pct) + "%" : "";
+    let size = a.total ? `${bytes(a.have)} of ${bytes(a.total)}` : bytes(a.have);
+    if (r.speed > 0) {
+      size += ` - ${bytes(r.speed)}/s`;
+      if (a.total && a.total > a.have) size += `, ${duration((a.total - a.have) / r.speed)} left`;
+    }
+    $(".dl-size", r.el).textContent = size;
+  }
+  for (const [rel, r] of dlRows) if (!seen.has(rel)) { r.el.remove(); dlRows.delete(rel); }
+  if (!active.length) {
+    if (!box.querySelector(".dl-wait")) box.innerHTML = `<p class="muted small dl-wait">Waiting for the next file…</p>`;
+  } else { const w = box.querySelector(".dl-wait"); if (w) w.remove(); }
 }
 
 function renderEta(st, busy) {
