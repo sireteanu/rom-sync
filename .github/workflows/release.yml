@@ -1,5 +1,7 @@
-# Creates a GitHub release (v<version>, notes generated from the commits) the first time a new
-# version in pyproject.toml reaches main. To release: raise the version and push.
+# Creates a GitHub release (v<version>) the first time a new version in pyproject.toml reaches main.
+# Its text is that version's section of CHANGELOG.md ("## [1.2.0] - date"); without one, GitHub
+# writes notes from the commits. Editing an existing section updates the release text on the next
+# push. To release: add the changelog section, raise the version, push.
 name: Release
 on:
   push:
@@ -13,15 +15,31 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Release the version in pyproject.toml if it is new
+      - name: Release the version in pyproject.toml
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           tag="v$version"
+          # this version's section of CHANGELOG.md, without its heading
+          python3 - "$version" > notes.md <<'PY'
+          import re, sys
+          v = sys.argv[1]
+          text = open("CHANGELOG.md", encoding="utf-8").read() if __import__("os").path.exists("CHANGELOG.md") else ""
+          m = re.search(r"^## \[" + re.escape(v) + r"\][^\n]*\n(.*?)(?=^## \[|\Z)", text, re.M | re.S)
+          print(m.group(1).strip() if m else "")
+          PY
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "$tag already released - nothing to do"
+            if [ -s notes.md ]; then
+              gh release edit "$tag" --notes-file notes.md
+              echo "$tag exists - release text synced with CHANGELOG.md"
+            else
+              echo "$tag exists - nothing to do"
+            fi
+          elif [ -s notes.md ]; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Rom Sync $version" --notes-file notes.md
+            echo "Released $tag from CHANGELOG.md"
           else
             gh release create "$tag" --target "$GITHUB_SHA" --title "Rom Sync $version" --generate-notes
-            echo "Released $tag"
+            echo "Released $tag (no CHANGELOG.md section - notes generated from commits)"
           fi
