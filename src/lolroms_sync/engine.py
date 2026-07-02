@@ -429,5 +429,5 @@ class Engine:
                                bytes_left=left, eta=round(eta) if eta is not None else None,
                                running=g.inflight if g else 0, limit=g.limit if g else 0,
                                gate=g.describe() if g else "",
-                               active=[{"rel": r, "have": h, "total": t} for r, (h, t) in active[:20]])
+                               active=[{"rel": r, "have": h, "total": t} for r, (h, t) in active[:100]])
         return out
