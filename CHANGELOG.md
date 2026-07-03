@@ -5,6 +5,17 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-02
+
+### New
+- **Downloading** box under the log: every file being downloaded right now, with its folder, a
+  progress bar, percentage, size, speed and time left. It appears while a sync runs.
+
+### Improved
+- The Activity box stays short during big syncs (the file list moved to the new box), and a paused
+  sync's reason is shown there on its own line.
+- "Parallel" no longer shows command-line wording ("at --dl-max" now reads "at your upper limit").
+
 ## [1.2.0] - 2026-07-01
 
 ### New
