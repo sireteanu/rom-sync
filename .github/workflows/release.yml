@@ -1,7 +1,7 @@
 # Creates a GitHub release (v<version>) the first time a new version in pyproject.toml reaches main.
 # Its text is that version's section of CHANGELOG.md ("## [1.2.0] - date"); without one, GitHub
-# writes notes from the commits. Editing an existing section updates the release text on the next
-# push. To release: add the changelog section, raise the version, push.
+# writes notes from the commits. A published release is never changed: every change gets a new
+# version. To release: add the changelog section, raise the version, push.
 name: Release
 on:
   push:
@@ -30,12 +30,7 @@ jobs:
           print(m.group(1).strip() if m else "")
           PY
           if gh release view "$tag" >/dev/null 2>&1; then
-            if [ -s notes.md ]; then
-              gh release edit "$tag" --notes-file notes.md
-              echo "$tag exists - release text synced with CHANGELOG.md"
-            else
-              echo "$tag exists - nothing to do"
-            fi
+            echo "$tag is already released and is never changed - raise the version for a new release"
           elif [ -s notes.md ]; then
             gh release create "$tag" --target "$GITHUB_SHA" --title "Rom Sync $version" --notes-file notes.md
             echo "Released $tag from CHANGELOG.md"

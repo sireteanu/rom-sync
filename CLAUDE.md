@@ -115,11 +115,13 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
 - Claude pushes to `main` from this session; the user's Unraid server builds the image from GitHub
   (`unraid/docker-compose.yml`, Compose Manager, `pull_policy: build`) - after a push the user
   clicks Compose Up. On Windows the user can run `publish.bat` (commit + pull --rebase + push).
-- Releases: every user-visible change gets a line under `## [Unreleased]` in `CHANGELOG.md`
-  (plain words, grouped New / Improved / Fixed / Changed). To release: rename that section to
-  `## [x.y.z] - date`, add a fresh `## [Unreleased]`, bump `version` in `pyproject.toml` and
+- Releases: **every push that changes the app is its own new version** (the Unraid server builds
+  whatever is on `main`, so the running version must match a release). Fixes -> patch (1.3.1),
+  new features -> minor (1.4.0). Add a `## [x.y.z] - date` section to `CHANGELOG.md` (plain words,
+  grouped New / Improved / Fixed / Changed), bump `version` in `pyproject.toml` and
   `src/lolroms_sync/__init__.py`, push; the `Release` workflow creates `v<version>` with that
-  section as its text (and re-syncs the text if the section is edited later). (This session can't call the
+  section as its text. Published releases and their changelog sections are never edited.
+  Pushes that only touch tooling/docs (workflows, CLAUDE.md) don't need a version. (This session can't call the
   releases API directly.) `docker.yml` (registry image) runs only when started by hand.
 - `git fetch origin main` before pushing from a shallow clone.
 
