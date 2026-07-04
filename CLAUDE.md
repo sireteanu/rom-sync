@@ -116,8 +116,9 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   (`unraid/docker-compose.yml`, Compose Manager, `pull_policy: build`) - after a push the user
   clicks Compose Up. On Windows the user can run `publish.bat` (commit + pull --rebase + push).
 - Releases: **every push that changes the app is its own new version** (the Unraid server builds
-  whatever is on `main`, so the running version must match a release). Fixes -> patch (1.3.1),
-  new features -> minor (1.4.0). Add a `## [x.y.z] - date` section to `CHANGELOG.md` (plain words,
+  whatever is on `main`, so the running version must match a release). By default bump the
+  last number (1.2.1 -> 1.2.2), also for small features; move to the next minor (1.3.0, 1.4.0)
+  only once changes are significant - the user decides, so ask before a minor/major bump. Add a `## [x.y.z] - date` section to `CHANGELOG.md` (plain words,
   grouped New / Improved / Fixed / Changed), bump `version` in `pyproject.toml` and
   `src/lolroms_sync/__init__.py`, push; the `Release` workflow creates `v<version>` with that
   section as its text. Published releases and their changelog sections are never edited.

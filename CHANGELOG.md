@@ -5,7 +5,7 @@ release. Newest first.
 
 ## [Unreleased]
 
-## [1.3.0] - 2026-07-02
+## [1.2.1] - 2026-07-04
 
 ### New
 - **Downloading** box under the log: every file being downloaded right now, with its folder, a
