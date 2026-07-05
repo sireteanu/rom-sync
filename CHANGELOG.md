@@ -5,6 +5,18 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-07-05
+
+### New
+- **Shut down**: the restart button is now a power menu with **Restart** and **Shut down**.
+  Shutting down stops Rom Sync until you start it again (start.bat, or Start / Compose Up on
+  Unraid); a sync that was running continues at the next start.
+
+### Changed
+- The Unraid compose file now uses `restart: on-failure`, so the container still restarts after a
+  crash but stays off after **Shut down**. Turn on **Autostart** for the stack in Compose Manager
+  so Rom Sync starts with the server.
+
 ## [1.2.1] - 2026-07-04
 
 ### New
