@@ -551,7 +551,32 @@ $("#settings-save").addEventListener("click", async (e) => {
 });
 
 /* ---------------------------------------------------------------- restart */
+/* power menu: Restart / Shut down */
+const powerBtn = $("#btn-power"), powerMenu = $("#power-menu");
+function powerOpen(open) {
+  powerMenu.hidden = !open;
+  powerBtn.setAttribute("aria-expanded", String(open));
+  if (open) powerMenu.querySelector("button").focus();
+}
+powerBtn.addEventListener("click", (e) => { e.stopPropagation(); powerOpen(powerMenu.hidden); });
+document.addEventListener("click", (e) => { if (!powerMenu.hidden && !powerMenu.contains(e.target)) powerOpen(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !powerMenu.hidden) { powerOpen(false); powerBtn.focus(); } });
+
+$("#btn-shutdown").addEventListener("click", async () => {
+  powerOpen(false);
+  if (!confirm("Shut down Rom Sync? A sync that is running continues the next time you start it.")) return;
+  let docker = false;
+  try { docker = !!(await api("/api/shutdown", { method: "POST" })).docker; }
+  catch (e) { alert("Could not shut down: " + e.message); return; }
+  clearTimeout(pollTimer);
+  $("#shutdown-how").textContent = docker
+    ? "Start it again in Unraid: Docker tab, rom-sync, Start (or Compose Up on its stack)."
+    : "Start it again with start.bat.";
+  $("#shutdown").hidden = false;
+});
+
 $("#btn-restart").addEventListener("click", async () => {
+  powerOpen(false);
   if (!confirm("Restart Rom Sync? A sync that is running carries on by itself afterwards.")) return;
   try { await api("/api/restart", { method: "POST" }); }
   catch (e) { alert("Could not restart: " + e.message); return; }

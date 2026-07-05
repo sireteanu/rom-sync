@@ -23,9 +23,22 @@
     <button id="btn-sync" class="btn primary" title="Download new, incomplete and changed files in the ticked folders">Sync selected</button>
     <button id="btn-stop" class="btn danger" disabled>Stop</button>
     <button id="btn-romm" class="btn" title="Show your synced folders to RomM, without moving them">RomM</button>
-    <button id="btn-restart" class="btn icon" title="Restart Rom Sync (a running sync carries on afterwards)" aria-label="Restart Rom Sync">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 7.75 6h-2.1A6 6 0 1 1 12 6c1.6 0 3.1.6 4.2 1.7L13 11h7V4l-2.4 2.4A7.9 7.9 0 0 0 12 4Z"/></svg>
-    </button>
+    <div class="power">
+      <button id="btn-power" class="btn icon" title="Restart or shut down" aria-label="Restart or shut down Rom Sync"
+              aria-haspopup="menu" aria-expanded="false" aria-controls="power-menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v9h-2zM6.3 6.3l1.4 1.4A6 6 0 1 0 16.3 7.7l1.4-1.4A8 8 0 1 1 6.3 6.3Z"/></svg>
+      </button>
+      <div id="power-menu" class="menu" role="menu" hidden>
+        <button id="btn-restart" role="menuitem">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 7.75 6h-2.1A6 6 0 1 1 12 6c1.6 0 3.1.6 4.2 1.7L13 11h7V4l-2.4 2.4A7.9 7.9 0 0 0 12 4Z"/></svg>
+          <span><b>Restart</b><small>Back in a few seconds; a running sync carries on</small></span>
+        </button>
+        <button id="btn-shutdown" role="menuitem" class="danger">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v9h-2zM6.3 6.3l1.4 1.4A6 6 0 1 0 16.3 7.7l1.4-1.4A8 8 0 1 1 6.3 6.3Z"/></svg>
+          <span><b>Shut down</b><small>Stops Rom Sync until you start it again</small></span>
+        </button>
+      </div>
+    </div>
     <button id="btn-theme" class="btn icon theme-toggle" title="Switch between dark and light" aria-label="Switch between dark and light">
       <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
       <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>
@@ -183,6 +196,7 @@
 </dialog>
 
 <div id="restarting" class="restarting" hidden><div><b>Restarting Rom Sync…</b><p class="muted">This page reloads when it's back.</p></div></div>
+<div id="shutdown" class="restarting" hidden><div><b>Rom Sync is shut down</b><p id="shutdown-how" class="muted"></p></div></div>
 
 <template id="row-tpl">
   <div class="node" role="treeitem">
