@@ -43,7 +43,7 @@ docker build -t "$NAME:latest" "$SRC"
 
 echo "Starting the container..."
 docker rm -f "$NAME" >/dev/null 2>&1 || true
-docker run -d --name "$NAME" --restart unless-stopped \
+docker run -d --name "$NAME" --restart on-failure \
   -p "$PORT:8484" \
   -v "$BASE/config:/config" \
   -v "$DATA:/data" \

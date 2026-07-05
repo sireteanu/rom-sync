@@ -96,12 +96,15 @@ def main(argv=None) -> int:
     restart = {"wanted": False}
     server = None
 
+    def on_shutdown():
+        server.should_exit = True
+
     def on_restart():
         restart["wanted"] = True
         server.should_exit = True
 
     app = create_app(lambda: Engine(config_dir, data_dir, args.site, data_locked=args.lock_data),
-                     password=args.password, on_restart=on_restart)
+                     password=args.password, on_restart=on_restart, on_shutdown=on_shutdown)
     shown = "localhost" if args.host in ("0.0.0.0", "127.0.0.1", "::") else args.host
     url = f"http://{shown}:{args.port}/"
     if not port_free(args.host, args.port):

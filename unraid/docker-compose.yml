@@ -23,4 +23,4 @@ services:
       # - LOLROMS_PASSWORD=change-me
     labels:
       net.unraid.docker.webui: "http://[IP]:[PORT:8484]/"
-    restart: unless-stopped
+    restart: on-failure            # restarts after a crash; stays off after "Shut down"

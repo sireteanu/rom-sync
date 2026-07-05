@@ -14,4 +14,4 @@ services:
       - UMASK=000
       - TZ=America/Toronto        # used for file dates and the schedule
       # - LOLROMS_PASSWORD=change-me   # ask for a password in the browser
-    restart: unless-stopped
+    restart: on-failure            # restarts after a crash; stays off after "Shut down"

@@ -30,8 +30,9 @@ def node_json(engine: Engine, tree: dict, rules: dict, path: str) -> dict:
             "state": engine.catalog.state_of(path, rules)}
 
 
-def create_app(engine_factory, password: Optional[str] = None, on_restart=None) -> FastAPI:
-    """on_restart: called by POST /api/restart to restart the whole program (see __main__)."""
+def create_app(engine_factory, password: Optional[str] = None, on_restart=None, on_shutdown=None) -> FastAPI:
+    """on_restart / on_shutdown: called by POST /api/restart and /api/shutdown to restart or end the
+    whole program (see __main__). Both keep an unfinished sync, which continues at the next start."""
     holder: dict = {}
 
     @contextlib.asynccontextmanager
@@ -212,6 +213,14 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None) 
         log.info("Restarting Rom Sync...")
         asyncio.get_running_loop().call_later(0.3, on_restart)
         return {"ok": True}
+
+    @app.post("/api/shutdown")
+    async def shutdown():
+        if on_shutdown is None:
+            raise HTTPException(501, "shutting down is not available when started this way")
+        log.info("Shutting down Rom Sync (from the web page)...")
+        asyncio.get_running_loop().call_later(0.3, on_shutdown)
+        return {"ok": True, "docker": eng().data_locked}
 
     @app.get("/api/health")
     async def health():

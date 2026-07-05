@@ -267,13 +267,16 @@ def test_romm_page_and_choices(site, app_factory):
     assert c.get("/api/settings").json()["settings"]["romm"]["map"] == {"Atari/2600": "skip"}
 
 
-def test_restart_endpoint(site, tmp_path):
+def test_restart_and_shutdown_endpoints(site, tmp_path):
     called = []
     app = create_app(lambda: Engine(str(tmp_path / "c"), str(tmp_path / "d"), site.url + "/", scan_delay=0),
-                     on_restart=lambda: called.append(1))
+                     on_restart=lambda: called.append("restart"), on_shutdown=lambda: called.append("shutdown"))
     with TestClient(app) as c:
         assert c.post("/api/restart").status_code == 200
+        r = c.post("/api/shutdown")
+        assert r.status_code == 200 and r.json()["docker"] is False
         time.sleep(0.6)
-    assert called == [1]
+    assert called == ["restart", "shutdown"]
     with TestClient(create_app(lambda: Engine(str(tmp_path / "c"), str(tmp_path / "d"), site.url + "/"))) as c:
         assert c.post("/api/restart").status_code == 501
+        assert c.post("/api/shutdown").status_code == 501
