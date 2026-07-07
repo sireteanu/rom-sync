@@ -46,5 +46,6 @@ class Config:
     check_remote: bool = False        # ask the server about every file already in the folder
     max_rate: int = 0
     min_free: int = 2 * 1024 ** 3
+    file_mode: Optional[int] = None       # e.g. 0o777: permissions for saved files and their folders
     overwrite: bool = False
     verify: bool = True

@@ -9,6 +9,7 @@ fetched - unchanged files cost no request at all.
 from __future__ import annotations
 
 import calendar
+import logging
 import os
 import re
 import sqlite3
@@ -16,6 +17,9 @@ import time
 from dataclasses import dataclass
 from email.utils import formatdate, parsedate_to_datetime
 from typing import Optional
+
+log = logging.getLogger("dircrawl")
+_stamp_warned = False
 
 MANIFEST_NAME = ".dir_crawler.db"
 
@@ -124,8 +128,45 @@ def stamp_file(path: str, info: "FileInfo", last_modified: Optional[str] = None)
             return False
         os.utime(path, (stamp, stamp))
         return True
-    except OSError:
+    except OSError as e:
+        global _stamp_warned
+        if not _stamp_warned:            # say it once: the cause is the same for every file
+            _stamp_warned = True
+            log.warning("Could not set file dates to the website's dates (%s: %s). Check that the "
+                        "download folder allows changing dates (owner/permissions of the share).",
+                        path, e)
         return False
+
+
+def stamp_folders(folders, root: str) -> int:
+    """Give each folder (and its parents below root) the date of the newest thing inside it, so
+    folders show when something in them last changed on the website, not when it was downloaded."""
+    root = os.path.abspath(root)
+    todo = set()
+    for f in folders:
+        f = os.path.abspath(f)
+        while f.startswith(root + os.sep):
+            todo.add(f)
+            f = os.path.dirname(f)
+    changed = 0
+    for d in sorted(todo, key=lambda p: p.count(os.sep), reverse=True):   # deepest first
+        newest = None
+        try:
+            with os.scandir(d) as it:
+                for e in it:
+                    if e.name.endswith(".part") or e.name.startswith(".dir_crawler.db"):
+                        continue
+                    try:
+                        m = e.stat(follow_symlinks=False).st_mtime
+                    except OSError:
+                        continue
+                    newest = m if newest is None or m > newest else newest
+            if newest is not None and abs(os.stat(d).st_mtime - newest) >= 2:
+                os.utime(d, (newest, newest))
+                changed += 1
+        except OSError as e:
+            log.debug("could not date folder %s: %s", d, e)
+    return changed
 
 
 def http_date_epoch(value: Optional[str]) -> Optional[float]:

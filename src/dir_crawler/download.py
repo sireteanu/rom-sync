@@ -62,6 +62,7 @@ class Downloader:
         self.retry_state: dict = {}      # url -> counters that survive being put back in the queue
         self.active: dict = {}           # relative path -> [received, total or None]
         self.bytes = 0                   # bytes received
+        self.touched_dirs: set = set()   # folders whose files were saved or re-dated (stamp_folders)
         self.successes = 0
         self.last_success_started = 0.0  # start time of the most recent download that succeeded
         self.limit_streak = 0            # consecutive "web page instead of file" answers
@@ -88,6 +89,7 @@ class Downloader:
         size = os.path.getsize(dest)
         rec = self.manifest.get(rel)
         stamp_file(dest, info, rec.last_modified if rec else None)   # fix dates of files we already have
+        self._set_mode(dest)
         if action == ADOPT:
             self.manifest.done(rel, url, size, None, None, info)
             self.on_done(url, rel, "already in folder", size)
@@ -139,6 +141,39 @@ class Downloader:
             self.retry_state.pop(url, None)
         return result
 
+    def _set_mode(self, path: str) -> None:
+        """Apply cfg.file_mode (e.g. 0o777) to a saved file and remember its folder for
+        stamp_folders(). Best effort: a share or a Windows drive may not support it, and that must
+        never fail a download."""
+        self.touched_dirs.add(os.path.dirname(path))
+        if self.cfg.file_mode is None:
+            return
+        try:
+            os.chmod(path, self.cfg.file_mode)
+        except OSError as e:
+            log.debug("could not set permissions on %s: %s", path, e)
+
+    def _make_dirs(self, folder: str) -> None:
+        """Create a file's folder; with cfg.file_mode, new folders (up to the download root) get it
+        too, plus the 'enter' bit wherever reading is allowed, so they can be opened."""
+        mode = self.cfg.file_mode
+        if mode is None:
+            os.makedirs(folder, exist_ok=True)
+            return
+        new = []
+        root = os.path.abspath(self.root or "")
+        f = os.path.abspath(folder)
+        while f and not os.path.isdir(f) and f != root and os.path.dirname(f) != f:
+            new.append(f)
+            f = os.path.dirname(f)
+        os.makedirs(folder, exist_ok=True)
+        dir_mode = mode | ((mode & 0o444) >> 2)
+        for d in reversed(new):
+            try:
+                os.chmod(d, dir_mode)
+            except OSError as e:
+                log.debug("could not set permissions on %s: %s", d, e)
+
     async def _download(self, url, rel, info, action, reason):
         cfg, man = self.cfg, self.manifest
         if not self.allowed(url):
@@ -146,7 +181,7 @@ class Downloader:
             return DONE
         dest = self.dest_of(rel)
         part = dest + ".part"
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        self._make_dirs(os.path.dirname(dest))
         if action == RESUME and not os.path.exists(part) and os.path.exists(dest):
             os.replace(dest, part)                         # continue a truncated file
         if action == UPDATE and os.path.exists(part) and cfg.overwrite and url not in self.retry_state:
@@ -187,6 +222,7 @@ class Downloader:
                     if status == 416 and have:              # the .part is already complete
                         os.replace(part, dest)
                         stamp_file(dest, info, lm)
+                        self._set_mode(dest)
                         man.done(rel, url, have, lm, etag, info)
                         self._done(url, rel, DONE_WORD[action], have)
                         return DONE
@@ -270,6 +306,7 @@ class Downloader:
                         return DONE
                 os.replace(part, dest)
                 stamp_file(dest, info, lm)                  # file date = date shown on the website
+                self._set_mode(dest)
                 man.done(rel, url, have, lm, etag, info)
                 self._done(url, rel, DONE_WORD[action], have, got, t0)
                 return DONE

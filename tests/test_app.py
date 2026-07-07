@@ -280,3 +280,38 @@ def test_restart_and_shutdown_endpoints(site, tmp_path):
     with TestClient(create_app(lambda: Engine(str(tmp_path / "c"), str(tmp_path / "d"), site.url + "/"))) as c:
         assert c.post("/api/restart").status_code == 501
         assert c.post("/api/shutdown").status_code == 501
+
+
+def test_downloaded_files_and_folders_get_the_permissions_setting(site, app_factory):
+    import stat
+    c = app_factory(site)
+    old = os.umask(0o022)                   # a typical umask would give 644 files / 755 folders
+    try:
+        scan(c)
+        select(c, "Atari/2600")
+        sync(c)
+    finally:
+        os.umask(old)
+    f = c.data / "Atari" / "2600" / "Adventure (USA).7z"
+    assert stat.S_IMODE(f.stat().st_mode) == 0o777                         # default setting: 777
+    assert stat.S_IMODE((c.data / "Atari" / "2600").stat().st_mode) == 0o777
+    assert stat.S_IMODE((c.data / "Atari").stat().st_mode) == 0o777
+
+    assert c.post("/api/settings", json={"file_mode": "00775"}).json()["settings"]["file_mode"] == "775"
+    assert c.post("/api/settings", json={"file_mode": "999"}).status_code == 400
+    os.chmod(f, 0o600)
+    sync(c)                                                                # files already there are fixed too
+    assert stat.S_IMODE(f.stat().st_mode) == 0o775
+
+
+def test_files_and_folders_get_the_website_dates(site, app_factory):
+    c = app_factory(site)
+    scan(c)
+    select(c, "Atari/2600")
+    sync(c)
+    files = list((c.data / "Atari" / "2600").glob("*.7z"))
+    assert files and all(time.strftime("%Y-%m-%d", time.localtime(f.stat().st_mtime)) == "2025-11-17"
+                         for f in files)                                   # the website's date
+    newest = max(f.stat().st_mtime for f in files)
+    for folder in (c.data / "Atari" / "2600", c.data / "Atari"):           # folders too, not "today"
+        assert abs(folder.stat().st_mtime - newest) < 2, folder

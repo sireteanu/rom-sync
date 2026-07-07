@@ -23,6 +23,7 @@ DEFAULT_SETTINGS = {
     "parallel_max": 16,
     "max_rate": "",                 # "" = unlimited, e.g. "5M"
     "min_free": "2G",
+    "file_mode": "777",             # permissions for downloaded files and new folders; "" = system default
     "refresh_before_sync": True,    # re-read the selected folders' listings before syncing
     "resume_interrupted": True,     # restart a sync that was cut off (crash, reboot, restart)
     "interrupted_job": "",

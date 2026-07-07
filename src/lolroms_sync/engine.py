@@ -16,7 +16,7 @@ from dir_crawler.config import Config
 from dir_crawler.constants import ARCHIVE_EXTENSIONS, DOWNLOAD_EXTENSIONS
 from dir_crawler.download import Downloader, run_item
 from dir_crawler.limits import DownloadGate, RateLimit
-from dir_crawler.sync import FileInfo, Manifest, size_range
+from dir_crawler.sync import FileInfo, Manifest, size_range, stamp_folders
 from dir_crawler.util import fmt_bytes, parse_size
 
 from . import __version__
@@ -55,6 +55,17 @@ def parse_types(text) -> Optional[frozenset]:
         return None
     return frozenset("." + e.strip().lstrip(".") for e in t.split(",") if e.strip())
 
+
+
+def parse_mode(value) -> str:
+    """'777', '0777', '00777' or '' -> normalised '777' / '' (keep the system default)."""
+    v = str(value or "").strip()
+    if not v:
+        return ""
+    digits = v.lstrip("0") or "0"
+    if not (len(digits) <= 3 and all(c in "01234567" for c in digits)):
+        raise ValueError(f"file permissions must be octal like 777 or 775, not {v!r}")
+    return digits.rjust(3, "0")
 
 class Engine:
     def __init__(self, config_dir: str, data_dir: str, base_url: str = "https://lolroms.com/", *,
@@ -108,6 +119,8 @@ class Engine:
                 continue
             if k in ("refresh_before_sync", "check_remote", "resume_interrupted"):
                 v = bool(v)
+            if k == "file_mode":
+                v = parse_mode(v)
             if k in ("max_rate", "min_free") and v:
                 parse_size(str(v))               # validates, raises on nonsense
             if k == "parallel" and str(v).strip().lower() != "auto":
@@ -233,6 +246,7 @@ class Engine:
         recognised = DOWNLOAD_EXTENSIONS | (types or frozenset())
         cfg = Config(start_url=self.base, download_dir=data_dir, check_remote=bool(s["check_remote"]),
                      min_free=parse_size(str(s["min_free"] or "0")), download_exts=recognised,
+                     file_mode=int(parse_mode(s.get("file_mode", "")), 8) if parse_mode(s.get("file_mode", "")) else None,
                      user_agent=USER_AGENT)
         manifest = Manifest(data_dir)
         host = urlsplit(self.base).hostname or ""
@@ -335,6 +349,10 @@ class Engine:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            if dl.touched_dirs:
+                n = await asyncio.to_thread(stamp_folders, list(dl.touched_dirs), data_dir)
+                if n:
+                    log.info("Dated %d folders to their newest file", n)
             best = self.gate.remembered_max()
             if best:
                 manifest.set_meta(key, best)
