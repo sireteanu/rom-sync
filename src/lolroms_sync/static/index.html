@@ -134,6 +134,10 @@
       <label class="field"><span>Keep free on disk</span><input name="min_free" placeholder="2G"></label>
     </div>
     <div class="row2">
+      <label class="field"><span>File permissions</span><input name="file_mode" placeholder="Leave empty for the system default" inputmode="numeric">
+        <small>For downloaded files and new folders. 777 = everyone can read and write them.</small></label>
+    </div>
+    <div class="row2">
       <label class="field"><span>Sync automatically every</span><span class="unit"><input name="sync_every_hours" type="number" min="0" step="1"> hours</span><small>0 turns it off.</small></label>
       <label class="field"><span>Full site scan every</span><span class="unit"><input name="full_scan_every_days" type="number" min="0" step="1"> days</span><small>Picks up new folders.</small></label>
     </div>

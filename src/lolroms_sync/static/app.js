@@ -512,6 +512,7 @@ $("#btn-settings").addEventListener("click", async () => {
   form.parallel_n.value = auto ? s.parallel_max : s.parallel;
   form.max_rate.value = s.max_rate || "";
   form.min_free.value = s.min_free || "";
+  form.file_mode.value = s.file_mode || "";
   form.sync_every_hours.value = s.sync_every_hours;
   form.full_scan_every_days.value = s.full_scan_every_days;
   form.refresh_before_sync.checked = !!s.refresh_before_sync;
@@ -530,6 +531,7 @@ $("#settings-save").addEventListener("click", async (e) => {
     parallel: auto ? "auto" : form.parallel_n.value,
     max_rate: form.max_rate.value.trim(),
     min_free: form.min_free.value.trim() || "0",
+    file_mode: form.file_mode.value.trim(),
     sync_every_hours: form.sync_every_hours.value || 0,
     full_scan_every_days: form.full_scan_every_days.value || 0,
     refresh_before_sync: form.refresh_before_sync.checked,
