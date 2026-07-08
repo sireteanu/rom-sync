@@ -189,6 +189,8 @@ def test_interface_is_served(site, app_factory):
     assert page.status_code == 200 and "Rom Sync" in page.text
     assert c.get("/static/app.js").status_code == 200
     assert c.get("/static/app.css").status_code == 200
+    import lolroms_sync
+    assert c.get("/api/status").json()["version"] == lolroms_sync.__version__   # shown in the header
 
 
 def test_ticking_every_subfolder_ticks_the_parent(site, app_factory):
