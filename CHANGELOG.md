@@ -5,6 +5,19 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-07-08
+
+### New
+- **File permissions** setting (Settings): downloaded files and the folders Rom Sync creates get
+  these permissions. The default is **777**, so everyone on the share can read and change them.
+  Leave it empty to keep the system default. Files you already have are updated at the next sync.
+
+### Fixed
+- **Folders now show the website's dates too**: after a sync, each folder gets the date of the
+  newest file inside it, instead of the day it was downloaded.
+- If the server refuses to change file dates, the log now says so (once) instead of failing
+  silently.
+
 ## [1.2.2] - 2026-07-05
 
 ### New
