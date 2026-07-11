@@ -48,6 +48,8 @@ h2 { font-size: 15px; font-weight: 600; }
   padding: 14px 24px; background: var(--shell); border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 10px; }
+.version { font-size: 12px; color: var(--ink-2); text-decoration: none; font-variant-numeric: tabular-nums; margin-left: -4px; }
+.version:hover { color: var(--ink); text-decoration: underline; }
 .cart { width: 26px; height: 26px; fill: var(--grape-ink); }
 .cart .lbl { fill: var(--shell); }
 .pill {

@@ -306,6 +306,12 @@ function setStats(el, pairs) {
 }
 
 function renderStatus(st) {
+  const ver = $("#version");
+  if (st.version && ver.dataset.v !== st.version) {
+    ver.dataset.v = st.version;
+    ver.textContent = "v" + st.version;
+    ver.href = `https://github.com/sireteanu/rom-sync/releases/tag/v${st.version}`;
+  }
   const busy = st.busy;
   const job = st.job;
   const pill = $("#jobpill");
