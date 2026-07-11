@@ -5,6 +5,12 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-07-11
+
+### New
+- The version you're running is shown next to "Rom Sync" at the top of the page. Click it to see
+  what changed in that version.
+
 ## [1.2.3] - 2026-07-08
 
 ### New
