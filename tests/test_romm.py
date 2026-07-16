@@ -17,7 +17,11 @@ FOLDERS = {
 
 
 def m(**opt):
-    return Mapping(FOLDERS, dict({"host_path": "/path/to/roms"}, **opt))
+    return Mapping(FOLDERS, dict({"host_path": "/path/to/roms", "layout": "folders"}, **opt))
+
+
+def cat(folders=None, **opt):
+    return Mapping(folders or FOLDERS, dict({"host_path": "/path/to/roms"}, **opt))   # default layout
 
 
 def plat(mp, slug):
@@ -88,3 +92,36 @@ def test_check_action():
     for bad in ("super famicom", "bios:", "../x"):
         with pytest.raises(ValueError):
             check_action(bad)
+
+
+def test_category_layout_is_the_default_and_uses_wildcards():
+    mp = cat()
+    snes = plat(mp, "snes")
+    assert snes["templates"] == ["roms/{platform}/{game}", "roms/{platform}/{category}/{game}"]
+    assert {"Satellaview", "MSU-1"} <= set(snes["exclude"])          # kept out of the wildcard
+    apf = plat(mp, "apf")                                            # mount APF, games one level down
+    assert apf["templates"] == ["roms/{platform}/{category}/{game}"]
+    assert plat(mp, "ngc")["templates"] == ["roms/{platform}/{game}"]
+    y = mp.config_yml()
+    assert '- "roms/{platform}/{category}/{game}"' in y and '"Satellaview"' in y
+
+
+def test_category_layout_two_levels_and_mount_children_excluded():
+    folders = {"": (0, 0), "SEGA": (0, 0), "SEGA/Saturn": (5, 5), "SEGA/Saturn/T-En": (0, 0),
+               "SEGA/Saturn/T-En/Discs": (3, 3), "SEGA/Saturn/Flux": (2, 2)}
+    sat = plat(cat(folders), "saturn")
+    assert sat["templates"] == ["roms/{platform}/{game}", "roms/{platform}/{category}/{subcategory}/{game}"]
+    assert sat["exclude"] == ["Flux"]
+
+
+def test_category_layout_falls_back_to_exact_names_when_a_wildcard_would_misread():
+    # a folder needed by one platform has a name another platform excludes -> exact name added
+    folders = {"": (0, 0), "A": (2, 2), "A/Extras": (1, 1), "B": (2, 2), "B/Extras": (1, 1)}
+    mp = cat(folders, map={"A": "nes", "B": "snes", "B/Extras": "skip"})
+    nes = plat(mp, "nes")
+    assert "roms/{platform}/Extras/{game}" in nes["templates"]
+    # a grouping folder with unwanted files of its own at a wildcard depth -> exact names only
+    folders = {"": (0, 0), "P": (0, 0), "P/X": (2, 2), "P/Y": (2, 2), "P/Y/Z": (2, 2)}
+    mp = cat(folders, map={"P/X": "gb", "P/Y/Z": "gb", "P/Y": "skip"})
+    gb = plat(mp, "gb")
+    assert gb["templates"] == ["roms/{platform}/X/{game}", "roms/{platform}/Y/Z/{game}"]

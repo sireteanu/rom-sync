@@ -267,6 +267,9 @@ def test_romm_page_and_choices(site, app_factory):
     assert "atari2600" not in {p["slug"] for p in d["platforms"]}
     assert c.post("/api/romm/map", json={"path": "Atari/2600", "action": "Not A Slug"}).status_code == 400
     assert c.get("/api/settings").json()["settings"]["romm"]["map"] == {"Atari/2600": "skip"}
+    assert c.get("/api/romm").json()["options"]["layout"] == "category"
+    d = c.post("/api/romm/options", json={"layout": "folders"}).json()
+    assert d["options"]["layout"] == "folders" and "{category}" not in d["outputs"]["config"]
 
 
 def test_restart_and_shutdown_endpoints(site, tmp_path):

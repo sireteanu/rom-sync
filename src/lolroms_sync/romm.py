@@ -36,6 +36,8 @@ DEFAULT_OPTIONS = {
     "only_synced": True,          # only folders that have files on disk (a mount of a missing folder
                                   # makes Docker create an empty one)
     "variants": True,             # pull unmapped subfolders (T-En, hacks ...) into their platform
+    "layout": "category",         # config.yml subfolder levels: "category" = {category} wildcards
+                                  # (new subfolders are picked up), "folders" = exact folder names
     "map": {},                    # your own actions: {lolroms path: action}
 }
 
@@ -252,33 +254,66 @@ class Mapping:
                 games.setdefault(r["slug"], []).append(path)
             elif r["kind"] == BIOS and self._uses(path):
                 fw.setdefault(r["slug"], []).append(path)
+        wild = self.opt.get("layout", "category") == "category"
         self.platforms = []
         for slug in sorted(games):
             paths = sorted(games[slug])
             mount = common_dir(paths)
-            templates = ["roms/{platform}/" + (rel(p, mount) + "/" if rel(p, mount) else "") + "{game}"
-                         for p in paths]
+            used = set(paths)
             # every folder on the way from the mount to a used folder is a grouping level
             grouping = set()
             for p in paths:
                 while len(p) > len(mount):
                     grouping.add(p)
                     p = parent_of(p)
+            # folders RomM looks inside: the used ones, and (with {category} wildcards, which match
+            # any subfolder) the mount and every grouping level. Their other subfolders are excluded.
+            looked_in = used | ((grouping | {mount}) if wild else set())
             exclude = set()
-            used = set(paths)
-            for p in paths:
-                for child in self.children(p):
+            for d in looked_in:
+                for child in self.children(d):
                     if child not in used and child not in grouping:
                         exclude.add(name_of(child))
-            self.platforms.append({"slug": slug, "mount": mount, "folders": paths,
-                                   "templates": templates, "exclude": sorted(exclude),
+            self.platforms.append({"slug": slug, "mount": mount, "folders": paths, "grouping": grouping,
+                                   "exclude": sorted(exclude),
                                    "files": sum(self._counts(p)[1 if self.opt["only_synced"] else 0]
                                                 for p in paths)})
+        # exclude.roms.multi_file.names is one list for all platforms (case-insensitive), and a
+        # wildcard level skips those names - so a folder we need whose name is excluded somewhere
+        # gets an exact-name template instead (RomM always follows literal levels).
+        excluded = {n.lower() for p in self.platforms for n in p["exclude"]}
+        for p in self.platforms:
+            p["templates"] = self._templates(p, wild, excluded)
+            del p["grouping"]
         self.firmware = []
         for slug in sorted(fw):
             paths = sorted(fw[slug])
             self.firmware.append({"slug": slug, "mount": paths[0], "folders": paths[:1],
                                   "ignored": paths[1:]})
+
+    def _templates(self, plat: dict, wild: bool, excluded: set) -> list:
+        mount, paths = plat["mount"], plat["folders"]
+        literal = ["roms/{platform}/" + (rel(p, mount) + "/" if rel(p, mount) else "") + "{game}"
+                   for p in paths]
+        if not wild:
+            return literal
+        depth = {p: (rel(p, mount).count("/") + 1 if rel(p, mount) else 0) for p in paths}
+        depths = set(depth.values())
+        # a wildcard level reads every folder at that depth: if one of them holds files of its own
+        # but isn't wanted (only a way down to wanted folders), exact names are the only safe choice
+        for g in plat["grouping"] - set(paths):
+            gd = rel(g, mount).count("/") + 1
+            if gd in depths and self._counts(g)[1 if self.opt["only_synced"] else 0]:
+                return literal
+        names = ["{category}", "{subcategory}"]
+        out = []
+        for d in sorted(depths):
+            levels = [names[i] if i < len(names) else "{level%d}" % (i + 1) for i in range(d)]
+            out.append("/".join(["roms/{platform}", *levels, "{game}"]))
+        for p, t in zip(paths, literal):
+            if any(part.lower() in excluded for part in rel(p, mount).split("/") if part):
+                out.append(t)
+        return out
 
     def children(self, path):
         if not hasattr(self, "_kids"):

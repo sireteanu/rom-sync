@@ -163,7 +163,7 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
         s = e.catalog.settings()
         opt = romm.options_from(s)
         m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])), opt)
-        return {"options": {k: opt[k] for k in ("host_path", "library", "only_synced", "variants")},
+        return {"options": {k: opt[k] for k in ("host_path", "library", "only_synced", "variants", "layout")},
                 "rows": m.rows(), "platforms": m.platforms, "firmware": m.firmware,
                 "warnings": m.warnings(), "summary": m.summary(), "slugs": [{"slug": k, "name": v[0], "family": v[1], "kind": v[2]}
                           for k, v in sorted(romm.PLATFORMS.items())],
@@ -183,6 +183,8 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
         for k in ("only_synced", "variants"):
             if k in values:
                 cur[k] = bool(values[k])
+        if values.get("layout") in ("category", "folders"):
+            cur["layout"] = values["layout"]
         if not cur.get("library"):
             cur.pop("library", None)
         e.catalog.save_settings({"romm": cur})
