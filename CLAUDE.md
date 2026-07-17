@@ -64,7 +64,12 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   and re-launches itself with `.venv` when the current Python lacks the dependencies.
 - **RomM** (`romm.py`, `romm_slugs.py` vendored from rommapp/romm platform_slugs.py): resolves
   each folder to platform/merge/bios/skip/unmapped from `RULES` + user map (settings `romm`),
-  groups by slug, mounts the common folder, and writes compose / Unraid / config.yml. RomM facts it
+  groups by slug, mounts the common folder, and writes compose / Unraid / config.yml.
+  Layout `category` (default) writes one `{category}`/`{subcategory}` template per depth; every
+  subfolder of a folder RomM descends into that isn't wanted goes into the (global, case-insensitive)
+  multi_file exclude list. A wanted folder whose name is excluded elsewhere gets an extra exact-name
+  template (RomM follows literal levels even when excluded); an unwanted grouping folder with files
+  at a wildcard depth forces exact names for that platform (`_templates()`). RomM facts it
   relies on are in the module docstring - re-check them against RomM's config_manager.py when
   RomM changes. Never move or rename the user's folders for RomM.
 - The display name is **Rom Sync**; package, module, image and folder names stay `lolroms-sync`.

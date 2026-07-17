@@ -97,8 +97,11 @@ RomM wants one folder per platform named by its slug (`roms/snes`), while lolrom
 - **Docker compose / Unraid** - read-only bind mounts such as
   `/path/to/roms/Nintendo/Super Famicom -> /romm/library/roms/snes`. For Unraid, paste the line
   into the RomM container's *Extra Parameters* (Advanced View).
-- **config.yml** - `filesystem.structure` templates that pull subfolders into their platform
-  (`roms/{platform}/T-En/{game}`), `exclude.roms.multi_file.names` so subfolders that are another
+- **config.yml** - `filesystem.structure` templates that pull subfolders into their platform.
+  By default they use RomM's `{category}` / `{subcategory}` levels
+  (`roms/{platform}/{category}/{game}`), so subfolders the site adds later are picked up without
+  a new config; or choose exact folder names (`roms/{platform}/T-En/{game}`).
+  Also `exclude.roms.multi_file.names` so subfolders that are another
   platform or not games aren't read as games, and `system.versions` for arcade boards RomM has no
   platform for. Merge it into RomM's `config.yml`, restart RomM and scan.
 

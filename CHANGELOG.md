@@ -5,6 +5,17 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-07-16
+
+### New
+- **RomM `{category}` support**: the generated `config.yml` now uses RomM's `{category}` and
+  `{subcategory}` folder levels (for example `roms/{platform}/{category}/{game}`) instead of listing
+  every subfolder by name. Subfolders the site adds later are picked up without changing the config.
+  Subfolders that are another platform or not games are still kept out. Where a wildcard would read
+  the wrong folders, that platform keeps exact folder names automatically.
+- RomM dialog option **Subfolders in config.yml**: `{category}` levels (default) or exact folder
+  names (the previous behaviour).
+
 ## [1.2.4] - 2026-07-11
 
 ### New
