@@ -164,6 +164,11 @@
   </div>
   <label class="check"><input type="checkbox" id="romm-only"> Only folders with synced files (Docker would create missing ones empty)</label>
   <label class="check"><input type="checkbox" id="romm-var"> Include subfolders such as T-En, hacks and add-ons in their platform</label>
+  <label class="field inline"><span>Subfolders in config.yml</span>
+    <select id="romm-layout">
+      <option value="category">{category} levels - also picks up subfolders the site adds later</option>
+      <option value="folders">Exact folder names - only the subfolders listed here</option>
+    </select></label>
   <ul id="romm-warn" class="warnings"></ul>
   <div class="romm-grid">
     <section>

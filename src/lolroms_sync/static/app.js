@@ -691,6 +691,7 @@ function rommLoad(d) {
   $("#romm-lib").value = d.options.library || "";
   $("#romm-only").checked = !!d.options.only_synced;
   $("#romm-var").checked = !!d.options.variants;
+  $("#romm-layout").value = d.options.layout || "category";
   const dl = $("#romm-slugs");
   if (!dl.children.length) {
     for (const v of ["skip", "merge"]) { const o = document.createElement("option"); o.value = v; dl.append(o); }
@@ -705,14 +706,15 @@ async function rommMap(path, action) {
 async function rommOptions() {
   rommLoad(await api("/api/romm/options", { method: "POST", body: {
     host_path: $("#romm-host").value, library: $("#romm-lib").value,
-    only_synced: $("#romm-only").checked, variants: $("#romm-var").checked } }));
+    only_synced: $("#romm-only").checked, variants: $("#romm-var").checked,
+    layout: $("#romm-layout").value } }));
 }
 $("#btn-romm").addEventListener("click", async () => {
   $("#romm-dlg").showModal();
   $("#romm-out").textContent = "Loading…";
   rommLoad(await api("/api/romm"));
 });
-for (const id of ["#romm-host", "#romm-lib", "#romm-only", "#romm-var"]) $(id).addEventListener("change", rommOptions);
+for (const id of ["#romm-host", "#romm-lib", "#romm-only", "#romm-var", "#romm-layout"]) $(id).addEventListener("change", rommOptions);
 $("#romm-filter").addEventListener("change", renderRomm);
 $("#romm-find").addEventListener("input", renderRomm);
 for (const t of document.querySelectorAll("#romm-dlg .tab")) t.addEventListener("click", () => { rommTab = t.dataset.out; renderRomm(); });
