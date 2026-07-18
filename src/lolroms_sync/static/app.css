@@ -284,3 +284,7 @@ table.romm-all tr.in-use td:nth-child(2) { font-weight: 600; }
 .field.inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
 .field.inline select { font: 13px var(--font); padding: 5px 8px; border-radius: var(--radius-s);
   border: 1px solid var(--line); background: var(--field); color: var(--ink); max-width: 100%; }
+
+/* "Files in this folder" row */
+.node.own-files > .row .name { font-style: italic; color: var(--ink-2); }
+.node.own-files.sel > .row .name { color: var(--ink); }

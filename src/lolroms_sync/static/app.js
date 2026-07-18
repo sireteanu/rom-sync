@@ -150,10 +150,46 @@ function makeNode(n, depth, showPath = false) {
   return el;
 }
 
+/* a folder with files of its own *and* subfolders gets a first row for just its own files, so they
+   can be ticked without ticking every subfolder */
+function ownRow(node, depth) {
+  const el = tpl.content.firstElementChild.cloneNode(true);
+  el.classList.add("own-files");
+  el.dataset.path = node.path + "/.";
+  $(".twisty", el.firstElementChild).classList.add("leaf");
+  $(".tick", el).addEventListener("change", (e) => select(node.path + "/.", e.target.checked));
+  $(".name", el).addEventListener("click", () => showFiles(node.path));
+  $(".info", el).addEventListener("click", () => showFiles(node.path));
+  fillOwnRow(el, node, depth);
+  return el;
+}
+function fillOwnRow(el, n, depth) {
+  const row = el.firstElementChild;
+  row.style.setProperty("--depth", depth);
+  const name = $(".name", row);
+  name.textContent = "Files in this folder";
+  name.title = `The ${num(n.own_files)} files directly in ${n.path}, without its subfolders`;
+  $(".files", row).textContent = num(n.own_files);
+  $(".size", row).textContent = bytes(n.own_bytes);
+  $(".date", row).textContent = n.own_newest || "";
+  const tick = $(".tick", row);
+  tick.checked = n.own_state === "on";
+  tick.indeterminate = false;
+  tick.setAttribute("aria-label", `Sync the files directly in ${n.path}`);
+  el.classList.toggle("sel", n.own_state === "on");
+  const meter = $(".c-meter", row);
+  const pct = n.own_files ? n.own_synced / n.own_files : 0;
+  $(".fill", meter).style.width = (pct * 100).toFixed(1) + "%";
+  $(".pct", meter).textContent = n.own_synced === n.own_files ? "all" : n.own_synced ? Math.floor(pct * 100) + "%" : "";
+  meter.classList.toggle("has-failed", n.own_failed > 0);
+  meter.title = `${num(n.own_synced)} of ${num(n.own_files)} files synced`;
+}
+
 async function loadChildren(path, container, depth) {
   container.innerHTML = `<div class="loading" style="--depth:${depth}">Loading…</div>`;
   const data = await api(`/api/tree?path=${encodeURIComponent(path)}`);
   container.innerHTML = "";
+  if (path && data.node.own_files && data.children.length) container.append(ownRow(data.node, depth));
   for (const [i, c] of data.children.entries()) {
     const el = makeNode(c, depth);
     el._i = i;
@@ -205,7 +241,9 @@ async function refreshVisible() {
     let data;
     try { data = await api(`/api/tree?path=${encodeURIComponent(p)}`); } catch { continue; }
     const container = p === "" ? tree : $(".kids", nodes.get(p));
-    const known = new Set([...container.children].map((c) => c.dataset.path));
+    const own = container.querySelector(":scope > .own-files");
+    if (own) fillOwnRow(own, data.node, Number(own.firstElementChild.style.getPropertyValue("--depth")));
+    const known = new Set([...container.children].filter((c) => c._n).map((c) => c.dataset.path));
     const fresh = new Set(data.children.map((c) => c.path));
     const same = known.size === fresh.size && [...fresh].every((x) => known.has(x));
     if (!same) {                         // folders appeared / disappeared (after a scan)
