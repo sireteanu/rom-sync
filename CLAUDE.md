@@ -45,8 +45,10 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   live on the event loop thread.
 - A sync re-reads the ticked folders' listings first (setting `refresh_before_sync`), then plans
   every file with `Downloader.plan()`; unchanged files never hit the network.
-- Ticking every subfolder of a folder (that has no files of its own) folds into one tick on that
-  folder (`select()` walks up), so its box shows a tick, not "-". Clicking a "-" box ticks all.
+- Selection key `"<folder>/."` (`catalog.OWN`) = only the files directly in that folder ("Files in
+  this folder" row in the tree); `effective_files()` decides which folders' files are synced.
+  Ticking every part of a folder (subfolders, and its own files if any) folds into one tick on the
+  folder (`_fold()`), so its box shows a tick, not "-". Clicking a "-" box ticks all.
 - lolroms links some top-level sections (Arcade, Pokéhacks, Audio [FLAC], fixdats) **only from its
   header bar**, which the extractor skips as navigation. `scanner.header_dirs()` adds every
   one-segment `?dir=` link from the root page during a full scan. Mock: `HEADER_DIRS`.

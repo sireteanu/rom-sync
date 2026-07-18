@@ -5,6 +5,16 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-07-18
+
+### Fixed
+- **Files directly in a folder can be ticked on their own.** A folder that has both files and
+  subfolders (like Nintendo/Super Famicom) now shows a **Files in this folder** row first. Tick it to
+  sync those files without ticking every subfolder. Before, ticking only some subfolders left the
+  folder's own files out, with no way to add them except ticking the whole folder.
+- Ticking a folder's files and all of its subfolders one by one now shows the folder as fully
+  ticked.
+
 ## [1.2.5] - 2026-07-16
 
 ### New
