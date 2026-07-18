@@ -35,6 +35,9 @@ DEFAULT_SETTINGS = {
 }
 
 
+OWN = "/."          # selection key suffix: "Nintendo/Super Famicom/." = only the files directly in it
+
+
 def parent_of(path: str) -> str:
     return path.rsplit("/", 1)[0] if "/" in path else ""
 
@@ -250,8 +253,28 @@ class Catalog:
                 return rules[a]
         return False
 
+    @classmethod
+    def effective_files(cls, path: str, rules: dict) -> bool:
+        """Whether the files directly in `path` are selected: its "files in this folder" rule
+        (key "<path>/.") if there is one, else the folder's own tick."""
+        own = path + OWN
+        return rules[own] if own in rules else cls.effective(path, rules)
+
     def select(self, path: str, include: bool) -> None:
-        """Tick / untick a folder: applies to everything below it, including folders added later."""
+        """Tick / untick a folder: applies to everything below it, including folders added later.
+        "<folder>/." ticks only the files directly in that folder, not its subfolders."""
+        if path.endswith(OWN):
+            folder = path[:-len(OWN)]
+            with self.lock:
+                rules = self.rules()
+                if include == self.effective(folder, rules):
+                    self.db.execute("DELETE FROM selection WHERE path=?", (path,))
+                else:
+                    self.db.execute("INSERT OR REPLACE INTO selection VALUES (?,?)", (path, int(include)))
+                self.db.commit()
+            self.invalidate()
+            self._fold(folder, include)
+            return
         with self.lock:
             rules = self.rules()
             like = path + "/%" if path else "%"
@@ -263,18 +286,26 @@ class Catalog:
                 self.db.execute("INSERT OR REPLACE INTO selection VALUES (?,?)", (path, int(include)))
             self.db.commit()
         self.invalidate()
-        # ticking (or unticking) every subfolder one by one means the parent is fully ticked:
-        # fold the children's rules into one rule on the parent so its box shows a tick, not "-"
         if "/" in path:                    # not for top-level folders: there is no "everything" box
-            parent = parent_of(path)
-            with self.lock:
-                kids = [r[0] for r in self.db.execute("SELECT path FROM dirs WHERE parent=?", (parent,))]
-                own = self.db.execute("SELECT 1 FROM files WHERE dir=? LIMIT 1", (parent,)).fetchone()
-            if kids and not own:
-                rules = self.rules()
-                states = {self.state_of(k, rules) for k in kids}
-                if states == {"on" if include else "off"} and self.state_of(parent, rules) == "partial":
-                    self.select(parent, include)
+            self._fold(parent_of(path), include)
+
+    def _fold(self, folder: str, include: bool) -> None:
+        """Ticking (or unticking) every part of a folder one by one - each subfolder, and its own
+        files if it has any - means the folder is fully ticked: fold the rules into one rule on
+        the folder so its box shows a tick, not "-"."""
+        if not folder:
+            return
+        with self.lock:
+            kids = [r[0] for r in self.db.execute("SELECT path FROM dirs WHERE parent=?", (folder,))]
+            own = self.db.execute("SELECT 1 FROM files WHERE dir=? LIMIT 1", (folder,)).fetchone()
+        rules = self.rules()
+        want = "on" if include else "off"
+        if kids and {self.state_of(k, rules) for k in kids} != {want}:
+            return
+        if own and self.effective_files(folder, rules) != include:
+            return
+        if (kids or own) and self.state_of(folder, rules) == "partial":
+            self.select(folder, include)
 
     def clear_selection(self) -> None:
         with self.lock:
@@ -294,7 +325,7 @@ class Catalog:
     def selected_dirs(self) -> list:
         rules = self.rules()
         tree = self.tree()
-        return [p for p in tree if self.effective(p, rules)]
+        return [p for p in tree if self.effective_files(p, rules)]
 
     def selection_roots(self) -> list:
         """Smallest set of folders covering the selection (for refreshing their listings)."""

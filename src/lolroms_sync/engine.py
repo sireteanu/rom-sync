@@ -413,7 +413,7 @@ class Engine:
         rules = self.catalog.rules()
         sel = {"dirs": 0, "files": 0, "bytes": 0, "synced": 0, "synced_bytes": 0}
         for path, node in tree.items():
-            if self.catalog.effective(path, rules):
+            if self.catalog.effective_files(path, rules):
                 sel["dirs"] += 1
                 sel["files"] += node.own_files
                 sel["bytes"] += node.own_bytes

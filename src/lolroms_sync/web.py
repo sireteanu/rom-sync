@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import romm
+from .catalog import OWN
 from .engine import Engine, parse_types
 
 log = logging.getLogger("dircrawl")
@@ -27,7 +28,11 @@ def node_json(engine: Engine, tree: dict, rules: dict, path: str) -> dict:
             "newest": n.newest, "dirs": n.dirs, "has_children": bool(n.children),
             "own_files": n.own_files, "synced": n.synced, "synced_bytes": n.synced_bytes,
             "failed": n.failed, "error": n.error, "scanned": n.scanned,
-            "state": engine.catalog.state_of(path, rules)}
+            "state": engine.catalog.state_of(path, rules),
+            # the files directly in this folder (shown as their own row when it also has subfolders)
+            "own_bytes": n.own_bytes, "own_newest": n.own_newest, "own_synced": n.own_synced,
+            "own_synced_bytes": n.own_synced_bytes, "own_failed": n.own_failed,
+            "own_state": "on" if engine.catalog.effective_files(path, rules) else "off"}
 
 
 def create_app(engine_factory, password: Optional[str] = None, on_restart=None, on_shutdown=None) -> FastAPI:
@@ -115,7 +120,8 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
     @app.post("/api/select")
     async def select(path: str = Body(...), include: bool = Body(...)):
         e = eng()
-        if path not in e.catalog.tree():
+        folder = path[:-len(OWN)] if path.endswith(OWN) else path     # "<folder>/." = its own files
+        if folder not in e.catalog.tree() or (path.endswith(OWN) and not folder):
             raise HTTPException(404, "no such folder")
         e.catalog.select(path, include)
         return {"ok": True}

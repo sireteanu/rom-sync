@@ -320,3 +320,23 @@ def test_files_and_folders_get_the_website_dates(site, app_factory):
     newest = max(f.stat().st_mtime for f in files)
     for folder in (c.data / "Atari" / "2600", c.data / "Atari"):           # folders too, not "today"
         assert abs(folder.stat().st_mtime - newest) < 2, folder
+
+
+def test_files_in_a_folder_without_its_subfolders(site, app_factory):
+    site.files["Atari/800"] = ["Star Raiders.7z"]                  # files of its own + subfolder Flux
+    c = app_factory(site)
+    scan(c)
+    select(c, "Atari/800/Flux")                                    # ticking the subfolder...
+    n = tree(c, "Atari/800")["node"]
+    assert n["state"] == "partial" and n["own_state"] == "off"     # ...leaves the folder's own files out
+    r = c.post("/api/select", json={"path": "Atari/800/.", "include": True})   # "Files in this folder"
+    assert r.status_code == 200
+    assert kids(c, "Atari")["800"]["state"] == "on"                # own files + every subfolder = all
+    select(c, "Atari/800/Flux", False)
+    n = tree(c, "Atari/800")["node"]
+    assert n["state"] == "partial" and n["own_state"] == "on"
+    sync(c)
+    got = on_disk(c.data)
+    assert "Atari/800/Star Raiders.7z" in got
+    assert not any(p.startswith("Atari/800/Flux/") for p in got)
+    assert c.post("/api/select", json={"path": "Nope/.", "include": True}).status_code == 404
