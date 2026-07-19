@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
+import posixpath
 import re
 from typing import Optional
 
@@ -36,6 +38,10 @@ DEFAULT_OPTIONS = {
     "only_synced": True,          # only folders that have files on disk (a mount of a missing folder
                                   # makes Docker create an empty one)
     "variants": True,             # pull unmapped subfolders (T-En, hacks ...) into their platform
+    "method": "mounts",           # how RomM sees the folders: "mounts" = a Docker mount per platform,
+                                  # "links" = platform folder links next to the download folder
+    "links_dir": "",              # where the links go (path inside Rom Sync); "" = the download
+                                  # folder's parent, e.g. /romm when downloads are /romm/lolroms
     "layout": "category",         # config.yml subfolder levels: "category" = {category} wildcards
                                   # (new subfolders are picked up), "folders" = exact folder names
     "map": {},                    # your own actions: {lolroms path: action}
@@ -199,9 +205,10 @@ class Mapping:
     `folders` is {path: (files directly in it, of which on disk)}; every path's ancestors
     must be present (the catalog guarantees that)."""
 
-    def __init__(self, folders: dict, options: Optional[dict] = None):
+    def __init__(self, folders: dict, options: Optional[dict] = None, data_dir: str = ""):
         self.folders = folders
         self.opt = dict(DEFAULT_OPTIONS, **(options or {}))
+        self.data_dir = os.path.abspath(data_dir) if data_dir else ""
         self.user = {k: v for k, v in (self.opt.get("map") or {}).items() if v}
         self.res: dict = {}          # path -> dict(kind, slug, source)
         self._resolve()
@@ -359,12 +366,53 @@ class Mapping:
             if f["ignored"]:
                 w.append(f"Firmware for {f['slug']} comes from {f['mount']}; also found in "
                          + ", ".join(f["ignored"]) + " (left out - RomM reads one firmware folder per platform).")
+        if self.links:
+            if self.data_in_links() is None:
+                w.append("Platform links need the download folder inside the links folder (for example "
+                         "downloads in /romm/lolroms and links in /romm) - change the links folder or "
+                         "the download folder.")
+            if self.firmware:
+                w.append("Firmware isn't linked (RomM's bios folder is separate): copy these to RomM's bios "
+                         "folder: " + ", ".join(f["mount"] for f in self.firmware))
         if not self.opt["host_path"]:
             w.append("Set the download folder's path on your server (e.g. /path/to/roms) so the mounts "
                      "point at the right place.")
         return w
 
     # ------------------------------------------------------------------ outputs
+    # ------------------------------------------------------------------ links mode
+    @property
+    def links(self) -> bool:
+        return self.opt.get("method") == "links"
+
+    @property
+    def links_dir(self) -> str:
+        d = self.opt.get("links_dir") or (os.path.dirname(self.data_dir) if self.data_dir else "")
+        return os.path.abspath(d) if d else ""
+
+    def data_in_links(self) -> Optional[str]:
+        """The download folder relative to the links folder ("lolroms"), or None if it isn't
+        inside it (then RomM, which only sees the links folder, couldn't follow the links)."""
+        if not (self.data_dir and self.links_dir):
+            return None
+        r = os.path.relpath(self.data_dir, self.links_dir)
+        return None if r == "." or r.startswith("..") or os.path.isabs(r) else r.replace(os.sep, "/")
+
+    def link_targets(self) -> dict:
+        """{platform slug: relative link target}, e.g. {"snes": "lolroms/Nintendo/Super Famicom"}"""
+        inside = self.data_in_links()
+        if inside is None:
+            return {}
+        return {p["slug"]: inside + ("/" + p["mount"] if p["mount"] else "") for p in self.platforms}
+
+    def _links_host(self) -> str:
+        """The links folder as the Docker host sees it (RomM's roms folder)."""
+        base = (self.opt["host_path"] or "/path/to/downloads").rstrip("/\\")
+        inside = self.data_in_links()
+        if not inside:
+            return base
+        return posixpath.normpath(base + "/" + "/".join([".."] * (inside.count("/") + 1)))
+
     def _source(self, path: str) -> str:
         base = (self.opt["host_path"] or "/path/to/downloads").rstrip("/\\")
         return base + ("/" + path if path else "")
@@ -377,6 +425,11 @@ class Mapping:
             yield self._source(f["mount"]), f"{lib}/bios/{f['slug']}"
 
     def compose(self) -> str:
+        if self.links:
+            return ("    volumes:\n"
+                    "      # for the RomM service (not Rom Sync): replace its .../romm/library/roms line.\n"
+                    "      # Rom Sync keeps one folder link per platform in here.\n"
+                    f"      - {json.dumps(self._links_host() + ':' + self.opt['library'].rstrip('/') + '/roms', ensure_ascii=False)}\n")
         lines = ["    volumes:",
                  "      # for the RomM service (not Rom Sync): Rom Sync's folders, read-only,",
                  "      # each shown to RomM under its platform name"]
@@ -387,6 +440,9 @@ class Mapping:
 
     def unraid(self) -> str:
         """For the RomM container's "Extra Parameters" field (Advanced View)."""
+        if self.links:
+            return (f"In RomM's container settings, set the path mapped to {self.opt['library'].rstrip('/')}/roms "
+                    f"to:\n{self._links_host()}\n")
         out = []
         for src, dst in self._mounts():
             if "," in src or "'" in src:
@@ -402,6 +458,16 @@ class Mapping:
         lines = ["# RomM config.yml - generated by Rom Sync. Merge these sections into your config.yml",
                  "# (keep your other settings). Library: Rom Sync's folders mounted at roms/<platform>.", ""]
         names = sorted({n for p in self.platforms for n in p["exclude"]}, key=str.casefold)
+        inside = self.data_in_links() if self.links else None
+        if inside:
+            lines += ["exclude:", "  # the download folder itself is not a platform (its platforms are linked)",
+                      "  platforms:", f"    - {q(inside.split('/')[0])}"]
+            if names:
+                lines += ["  roms:", "    multi_file:",
+                          "      # subfolders that are another platform, firmware or not games",
+                          "      names:"] + [f"        - {q(n)}" for n in names]
+            lines.append("")
+            names = []
         if names:
             lines += ["exclude:", "  roms:", "    multi_file:",
                       "      # subfolders that are another platform, firmware or not games",
@@ -422,6 +488,67 @@ class Mapping:
     def summary(self) -> dict:
         return {"platforms": len(self.platforms), "firmware": len(self.firmware),
                 "files": sum(p["files"] for p in self.platforms)}
+
+
+def apply_links(m: "Mapping") -> dict:
+    """Create / update / remove the platform folder links for links mode. Only links that point
+    into the download folder are ever changed or removed; real folders are never touched."""
+    res = {"created": [], "updated": [], "removed": [], "kept": 0, "skipped": [], "errors": []}
+    inside = m.data_in_links()
+    if inside is None:
+        res["errors"].append("the download folder is not inside the links folder")
+        return res
+    links_dir = m.links_dir
+    want = m.link_targets()
+
+    def ours(target: str) -> bool:
+        t = target.replace(os.sep, "/")
+        return not os.path.isabs(t) and (t == inside or t.startswith(inside + "/"))
+
+    for name, target in sorted(want.items()):
+        path = os.path.join(links_dir, name)
+        try:
+            if os.path.islink(path):
+                cur = os.readlink(path)
+                if cur == target:
+                    res["kept"] += 1
+                    continue
+                if not ours(cur):
+                    res["skipped"].append(f"{name} (a link to {cur} that Rom Sync didn't make)")
+                    continue
+                os.remove(path)
+                os.symlink(target, path, target_is_directory=True)
+                res["updated"].append(name)
+            elif os.path.exists(path):
+                res["skipped"].append(f"{name} (a folder with that name already exists)")
+            else:
+                os.symlink(target, path, target_is_directory=True)
+                res["created"].append(name)
+        except OSError as e:
+            res["errors"].append(f"{name}: {e}")
+    try:
+        with os.scandir(links_dir) as it:
+            for e in it:
+                if e.is_symlink() and e.name not in want and ours(os.readlink(e.path)):
+                    try:
+                        os.remove(e.path)
+                        res["removed"].append(e.name)
+                    except OSError as err:
+                        res["errors"].append(f"{e.name}: {err}")
+    except OSError as e:
+        res["errors"].append(str(e))
+    return res
+
+
+def describe_links(res: dict) -> str:
+    parts = [f"{len(res['created'])} created", f"{len(res['updated'])} updated",
+             f"{len(res['removed'])} removed", f"{res['kept']} unchanged"]
+    out = "RomM platform links: " + ", ".join(parts)
+    if res["skipped"]:
+        out += "; skipped " + "; ".join(res["skipped"])
+    if res["errors"]:
+        out += "; problems: " + "; ".join(res["errors"][:5])
+    return out
 
 
 def folders_from_catalog(catalog, types=None) -> dict:
@@ -450,7 +577,7 @@ def main(argv=None) -> int:
     opt = options_from(s)
     if a.host_path:
         opt["host_path"] = a.host_path
-    m = Mapping(folders_from_catalog(cat, parse_types(s["types"])), opt)
+    m = Mapping(folders_from_catalog(cat, parse_types(s["types"])), opt, s["data_dir"])
     parts = {"compose": m.compose, "unraid": m.unraid, "config": m.config_yml}
     for k in (parts if a.what == "all" else [a.what]):
         if a.what == "all":

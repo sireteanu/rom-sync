@@ -168,8 +168,11 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
     def romm_view(e: Engine) -> dict:
         s = e.catalog.settings()
         opt = romm.options_from(s)
-        m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])), opt)
-        return {"options": {k: opt[k] for k in ("host_path", "library", "only_synced", "variants", "layout")},
+        m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])), opt, s["data_dir"])
+        return {"options": {k: opt[k] for k in ("host_path", "library", "only_synced", "variants", "layout",
+                                                 "method", "links_dir")},
+                "links": {"dir": m.links_dir, "download_dir": m.data_dir, "inside": m.data_in_links(),
+                          "targets": m.link_targets() if m.links else {}},
                 "rows": m.rows(), "platforms": m.platforms, "firmware": m.firmware,
                 "warnings": m.warnings(), "summary": m.summary(), "slugs": [{"slug": k, "name": v[0], "family": v[1], "kind": v[2]}
                           for k, v in sorted(romm.PLATFORMS.items())],
@@ -191,6 +194,10 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
                 cur[k] = bool(values[k])
         if values.get("layout") in ("category", "folders"):
             cur["layout"] = values["layout"]
+        if values.get("method") in ("mounts", "links"):
+            cur["method"] = values["method"]
+        if "links_dir" in values:
+            cur["links_dir"] = str(values["links_dir"] or "").strip()
         if not cur.get("library"):
             cur.pop("library", None)
         e.catalog.save_settings({"romm": cur})
@@ -212,6 +219,18 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
         cur["map"] = mapping
         e.catalog.save_settings({"romm": cur})
         return romm_view(e)
+
+    @app.post("/api/romm/links")
+    async def romm_links():
+        e = eng()
+        s = e.catalog.settings()
+        m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])),
+                         romm.options_from(s), s["data_dir"])
+        res = await asyncio.to_thread(romm.apply_links, m)
+        log.info(romm.describe_links(res))
+        view = romm_view(e)
+        view["applied"] = dict(res, text=romm.describe_links(res))
+        return view
 
     # ---------------------------------------------------------------- restart
     @app.post("/api/restart")

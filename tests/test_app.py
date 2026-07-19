@@ -340,3 +340,16 @@ def test_files_in_a_folder_without_its_subfolders(site, app_factory):
     assert "Atari/800/Star Raiders.7z" in got
     assert not any(p.startswith("Atari/800/Flux/") for p in got)
     assert c.post("/api/select", json={"path": "Nope/.", "include": True}).status_code == 404
+
+
+def test_romm_links_follow_each_sync(site, app_factory, tmp_path):
+    c = app_factory(site)                                        # downloads: tmp/data, links: tmp
+    scan(c)
+    select(c, "Atari/2600")
+    c.post("/api/romm/options", json={"method": "links", "links_dir": str(tmp_path)})
+    sync(c)
+    link = tmp_path / "atari2600"
+    assert link.is_symlink() and os.readlink(link) == "data/Atari/2600"
+    c.post("/api/romm/map", json={"path": "Atari/2600", "action": "skip"})   # no longer for RomM
+    d = c.post("/api/romm/links", json={}).json()
+    assert d["applied"]["removed"] == ["atari2600"] and not link.exists()

@@ -353,6 +353,7 @@ class Engine:
                 n = await asyncio.to_thread(stamp_folders, list(dl.touched_dirs), data_dir)
                 if n:
                     log.info("Dated %d folders to their newest file", n)
+            await self._update_romm_links()
             best = self.gate.remembered_max()
             if best:
                 manifest.set_meta(key, best)
@@ -380,6 +381,21 @@ class Engine:
         last = next((h for h in self.catalog.history(50) if h["kind"] in ("sync", "scan+sync")), None)
         base = last["finished"] if last and last.get("finished") else time.time()
         self.next_run = max(base + hours * 3600, time.time() + 60)
+
+    async def _update_romm_links(self) -> None:
+        """RomM links mode: keep the platform folder links in step with what's synced."""
+        from . import romm
+        s = self.catalog.settings()
+        opt = romm.options_from(s)
+        if opt.get("method") != "links":
+            return
+        try:
+            m = romm.Mapping(romm.folders_from_catalog(self.catalog, parse_types(s["types"])), opt, s["data_dir"])
+            res = await asyncio.to_thread(romm.apply_links, m)
+            if res["created"] or res["updated"] or res["removed"] or res["errors"] or res["skipped"]:
+                log.info(romm.describe_links(res))
+        except Exception as e:  # never let RomM housekeeping fail a sync
+            log.warning("Could not update the RomM platform links: %s", e)
 
     def resume_interrupted(self) -> bool:
         s = self.catalog.settings()

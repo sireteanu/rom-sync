@@ -125,3 +125,34 @@ def test_category_layout_falls_back_to_exact_names_when_a_wildcard_would_misread
     mp = cat(folders, map={"P/X": "gb", "P/Y/Z": "gb", "P/Y": "skip"})
     gb = plat(mp, "gb")
     assert gb["templates"] == ["roms/{platform}/X/{game}", "roms/{platform}/Y/Z/{game}"]
+
+
+def test_links_mode_makes_relative_platform_links(tmp_path):
+    import os
+    from lolroms_sync.romm import apply_links
+    lib = tmp_path / "romm"                                    # RomM's roms folder = /path/to/roms
+    data = lib / "lolroms"                                     # Rom Sync's downloads inside it
+    for p in FOLDERS:
+        (data / p).mkdir(parents=True, exist_ok=True)
+    (lib / "gb").mkdir()                                       # a real folder RomM already has
+    os.symlink("elsewhere/x", lib / "psx")                     # someone else's link
+    os.symlink("lolroms/Old/Gone", lib / "oldslug")            # a stale link of ours
+    mp = Mapping(FOLDERS, {"host_path": "/path/to/roms/lolroms", "method": "links"}, str(data))
+    assert mp.data_in_links() == "lolroms"
+    t = mp.link_targets()
+    assert t["snes"] == "lolroms/Nintendo/Super Famicom" and t["apf"] == "lolroms/APF"
+    res = apply_links(mp)
+    assert not res["errors"] and "snes" in res["created"] and res["removed"] == ["oldslug"]
+    assert os.readlink(lib / "snes") == "lolroms/Nintendo/Super Famicom"           # relative
+    assert (lib / "snes").resolve() == (data / "Nintendo" / "Super Famicom").resolve()
+    assert os.readlink(lib / "psx") == "elsewhere/x" and (lib / "gb").is_dir()     # untouched
+    assert apply_links(mp)["kept"] == len(t)                                       # idempotent
+    y = mp.config_yml()
+    assert 'platforms:\n    - "lolroms"' in y and '"Satellaview"' in y
+    assert '"/path/to/roms:/romm/library/roms"' in mp.compose()
+
+
+def test_links_mode_needs_the_downloads_inside_the_links_folder(tmp_path):
+    mp = Mapping(FOLDERS, {"method": "links", "links_dir": str(tmp_path / "other")}, str(tmp_path / "dl"))
+    assert mp.data_in_links() is None and mp.link_targets() == {}
+    assert any("inside the links folder" in w for w in mp.warnings())
