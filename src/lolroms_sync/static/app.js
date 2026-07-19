@@ -640,6 +640,10 @@ $("#btn-restart").addEventListener("click", async () => {
 /* ---------------------------------------------------------------- RomM */
 let romm = null;
 let rommTab = "compose";
+const ROMM_HELP_LINKS = {
+  compose: "For RomM's container: map the links folder as RomM's roms folder (replace its .../romm/library/roms line).",
+  unraid: "For RomM's container: change the path mapped to its roms folder to this one.",
+};
 const ROMM_HELP = {
   compose: "For RomM's container: add these under the RomM service in its docker-compose.yml (next to its other volumes).",
   unraid: "For RomM's container on Unraid: edit the RomM container, switch to Advanced View and paste this into Extra Parameters.",
@@ -694,7 +698,15 @@ function renderRomm() {
   $("#romm-list").hidden = !isList;
   $("#romm-copy").hidden = isList;
   if (isList) renderRommList(); else $("#romm-out").textContent = d.outputs[rommTab];
-  $("#romm-help").textContent = ROMM_HELP[rommTab];
+  $("#romm-help").textContent = (d.options.method === "links" && ROMM_HELP_LINKS[rommTab]) || ROMM_HELP[rommTab];
+  const links = d.options.method === "links";
+  $("#romm-links").hidden = !links;
+  if (links) {
+    $("#romm-linkdir").placeholder = d.links.dir || "";
+    $("#romm-linkdir-hint").textContent = d.links.inside
+      ? `Links go in ${d.links.dir}, next to "${d.links.inside}" (the download folder ${d.links.download_dir}). Map ${d.links.dir}'s server folder as RomM's roms folder.`
+      : `The download folder (${d.links.download_dir}) must be inside the links folder.`;
+  }
   for (const t of document.querySelectorAll("#romm-dlg .tab")) t.classList.toggle("on", t.dataset.out === rommTab);
 }
 function renderRommList() {
@@ -730,6 +742,8 @@ function rommLoad(d) {
   $("#romm-only").checked = !!d.options.only_synced;
   $("#romm-var").checked = !!d.options.variants;
   $("#romm-layout").value = d.options.layout || "category";
+  $("#romm-method").value = d.options.method || "mounts";
+  $("#romm-linkdir").value = d.options.links_dir || "";
   const dl = $("#romm-slugs");
   if (!dl.children.length) {
     for (const v of ["skip", "merge"]) { const o = document.createElement("option"); o.value = v; dl.append(o); }
@@ -745,14 +759,27 @@ async function rommOptions() {
   rommLoad(await api("/api/romm/options", { method: "POST", body: {
     host_path: $("#romm-host").value, library: $("#romm-lib").value,
     only_synced: $("#romm-only").checked, variants: $("#romm-var").checked,
-    layout: $("#romm-layout").value } }));
+    layout: $("#romm-layout").value, method: $("#romm-method").value,
+    links_dir: $("#romm-linkdir").value } }));
 }
 $("#btn-romm").addEventListener("click", async () => {
   $("#romm-dlg").showModal();
   $("#romm-out").textContent = "Loading…";
   rommLoad(await api("/api/romm"));
 });
-for (const id of ["#romm-host", "#romm-lib", "#romm-only", "#romm-var", "#romm-layout"]) $(id).addEventListener("change", rommOptions);
+$("#romm-apply").addEventListener("click", async () => {
+  const b = $("#romm-apply"), out = $("#romm-applied");
+  b.disabled = true;
+  try {
+    const d = await api("/api/romm/links", { method: "POST" });
+    rommLoad(d);
+    out.textContent = d.applied.text;
+    out.className = "small " + (d.applied.errors.length ? "error" : "muted");
+    out.hidden = false;
+  } catch (e) { out.textContent = "Could not update the links: " + e.message; out.className = "small error"; out.hidden = false; }
+  b.disabled = false;
+});
+for (const id of ["#romm-host", "#romm-lib", "#romm-only", "#romm-var", "#romm-layout", "#romm-method", "#romm-linkdir"]) $(id).addEventListener("change", rommOptions);
 $("#romm-filter").addEventListener("change", renderRomm);
 $("#romm-find").addEventListener("input", renderRomm);
 for (const t of document.querySelectorAll("#romm-dlg .tab")) t.addEventListener("click", () => { rommTab = t.dataset.out; renderRomm(); });

@@ -288,3 +288,7 @@ table.romm-all tr.in-use td:nth-child(2) { font-weight: 600; }
 /* "Files in this folder" row */
 .node.own-files > .row .name { font-style: italic; color: var(--ink-2); }
 .node.own-files.sel > .row .name { color: var(--ink); }
+
+.links-box { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 12px; margin: 6px 0; background: var(--field); }
+.links-box[hidden] { display: none; }
+.links-box .field input { background: var(--shell); }

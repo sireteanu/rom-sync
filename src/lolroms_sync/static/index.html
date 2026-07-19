@@ -153,9 +153,23 @@
 
 <dialog id="romm-dlg" class="dlg xwide">
   <form method="dialog" class="dlg-head"><h2>RomM library</h2><button class="btn icon" aria-label="Close">✕</button></form>
-  <p class="muted small">RomM sees each synced folder under its platform name through read-only mounts that you add to
-    <b>RomM's own container</b> (not Rom Sync's). Nothing is moved or copied, so syncing keeps working. Add the mounts
-    to RomM, merge the config into RomM's <code>config.yml</code>, restart RomM and scan its library.</p>
+  <p class="muted small">RomM sees each synced folder under its platform name - through a folder link per platform,
+    or a Docker mount per platform on <b>RomM's own container</b>. Nothing is moved or copied, so syncing keeps working.
+    Merge the config into RomM's <code>config.yml</code>, restart RomM and scan its library.</p>
+  <label class="field inline"><span>How RomM sees the folders</span>
+    <select id="romm-method">
+      <option value="links">Platform links in one folder - RomM needs a single folder mapping</option>
+      <option value="mounts">A Docker mount per platform on RomM's container</option>
+    </select></label>
+  <div id="romm-links" class="links-box" hidden>
+    <div class="row2">
+      <label class="field"><span>Links folder (inside Rom Sync)</span><input id="romm-linkdir" placeholder="">
+        <small id="romm-linkdir-hint">Must contain the download folder. Map this same folder as RomM's roms folder.</small></label>
+      <div class="field"><span>&nbsp;</span><button id="romm-apply" class="btn" type="button">Create / update links now</button>
+        <small>They're also updated after every sync.</small></div>
+    </div>
+    <p id="romm-applied" class="small muted" hidden></p>
+  </div>
   <div class="row2">
     <label class="field"><span>Download folder on the server</span><input id="romm-host" placeholder="/path/to/roms">
       <small>The folder Rom Sync saves to, as the RomM container's host sees it.</small></label>
