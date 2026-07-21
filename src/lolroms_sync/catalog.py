@@ -26,8 +26,8 @@ DEFAULT_SETTINGS = {
     "file_mode": "777",             # permissions for downloaded files and new folders; "" = system default
     "refresh_before_sync": True,    # re-read the selected folders' listings before syncing
     "resume_interrupted": True,     # restart a sync that was cut off (crash, reboot, restart)
-    "interrupted_job": "",
-    "romm": {},                     # RomM mapping options and your folder -> platform choices          # set while a sync runs; cleared when it ends normally
+    "interrupted_job": "",          # set while a sync runs; cleared when it ends normally
+    "romm": {},                     # RomM mapping options and your folder -> platform choices
     "check_remote": False,
     "sync_every_hours": 0,          # 0 = off
     "full_scan_every_days": 7,      # 0 = off (only when sync schedule is on, or on its own)

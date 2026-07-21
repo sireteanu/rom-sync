@@ -136,6 +136,11 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   Pushes that only touch tooling/docs (workflows, CLAUDE.md) don't need a version. (This session can't call the
   releases API directly.) `docker.yml` (registry image) runs only when started by hand.
 - `git fetch origin main` before pushing from a shallow clone.
+- **Docs stay current with every change** (same commit): `README.md` is the complete reference
+  for people and AI assistants (features, how it works, RomM, settings, options/env vars, files,
+  API, code map, release process, lolroms facts); `docs/user-guide.md` teaches users step by step;
+  `CHANGELOG.md` gets the version's entry. The GitHub repo's About text is set with
+  `gh api -X PATCH repos/sireteanu/rom-sync`.
 
 ## Conventions
 - Dependencies: httpx[http2], selectolax, rich, fastapi, uvicorn (+ pytest/pyflakes for dev). Ask before adding more.
