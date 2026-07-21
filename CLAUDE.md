@@ -74,6 +74,10 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   at a wildcard depth forces exact names for that platform (`_templates()`). RomM facts it
   relies on are in the module docstring - re-check them against RomM's config_manager.py when
   RomM changes. Never move or rename the user's folders for RomM.
+  Method `links` (user's setup): RomM's roms folder = links folder (default: parent of the download
+  folder, e.g. /romm with downloads in /romm/lolroms); `apply_links()` keeps relative symlinks
+  `<slug> -> lolroms/<mount>` after every sync (`Engine._update_romm_links`) and only ever changes
+  links pointing into the download folder; config.yml adds `exclude.platforms: [lolroms]`.
 - The display name is **Rom Sync**; package, module, image and folder names stay `lolroms-sync`.
 - Interface copy: plain sentence-case verbs ("Scan site", "Sync selected"); errors say what to do.
   Dark is the default theme; light via the header toggle (localStorage).

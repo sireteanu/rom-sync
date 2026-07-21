@@ -5,6 +5,21 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-07-21
+
+### New
+- **RomM platform links**: in the RomM dialog, choose **Platform links in one folder**. Rom Sync
+  then keeps one folder link per RomM platform next to its download folder - for example
+  `snes` -> `lolroms/Nintendo/Super Famicom` - and updates them after every sync. Map that one folder
+  as RomM's roms folder (for example `/path/to/roms`); no per-platform Docker mounts are
+  needed. The generated `config.yml` tells RomM to skip the download folder itself. Links are
+  relative, so they work inside RomM's container; real folders and links Rom Sync didn't make are
+  never touched.
+
+### Changed
+- The Unraid compose file now maps `/path/to/roms` to `/romm` and downloads into
+  `/romm/lolroms`, so the platform links can sit next to the downloads.
+
 ## [1.2.6] - 2026-07-18
 
 ### Fixed
