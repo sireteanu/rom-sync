@@ -139,8 +139,8 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
 - **Docs stay current with every change** (same commit): `README.md` is the complete reference
   for people and AI assistants (features, how it works, RomM, settings, options/env vars, files,
   API, code map, release process, lolroms facts); `docs/user-guide.md` teaches users step by step;
-  `CHANGELOG.md` gets the version's entry. The GitHub repo's About text is set with
-  `gh api -X PATCH repos/sireteanu/rom-sync`.
+  `CHANGELOG.md` gets the version's entry. The GitHub repo's About text/topics can't be
+  changed from this session (403) - give the user a `gh repo edit` command if it needs updating.
 
 ## Conventions
 - Dependencies: httpx[http2], selectolax, rich, fastapi, uvicorn (+ pytest/pyflakes for dev). Ask before adding more.
