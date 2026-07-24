@@ -21,7 +21,7 @@ services:
       - PUID=99            # nobody
       - PGID=100           # users
       - UMASK=000
-      - TZ=America/Toronto
+      - TZ=America/New_York
       - LOLROMS_DATA=/romm/lolroms   # where synced files go (inside the folder above)
       # - LOLROMS_PASSWORD=change-me
     labels:

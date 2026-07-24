@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Start the web interface without installing:  python run.py   (opens http://localhost:8484/)
 
-Options: python run.py --help   (e.g. --data F:\\Roms, --port 8484, --host 0.0.0.0)
+Options: python run.py --help   (e.g. --data D:\\Roms, --port 8484, --host 0.0.0.0)
 On Windows, start.bat is the easiest way: it sets up everything Rom Sync needs first.
 """
 import os

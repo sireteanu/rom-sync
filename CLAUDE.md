@@ -4,7 +4,7 @@ Web app (and the original CLI) for keeping local copies of lolroms.com folders i
 `lolroms_sync` is the web interface: it scans the whole site into a catalog, shows a folder tree
 with tri-state ticks, and syncs the ticked folders. `dir_crawler` is the engine it shares with the
 command-line tool (forked from lolroms-downloader v3.2). Python 3.9+, async (httpx), FastAPI.
-The user runs it on **Windows** (`start.bat`, F: drive) and will run it in **Docker on Unraid** -
+It runs on **Windows** (`start.bat`) and in **Docker on Unraid** -
 keep both working: Windows paths and console, and PUID/PGID/UMASK plus `/config` and `/data` in Docker.
 
 ## Commands
@@ -74,7 +74,7 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   at a wildcard depth forces exact names for that platform (`_templates()`). RomM facts it
   relies on are in the module docstring - re-check them against RomM's config_manager.py when
   RomM changes. Never move or rename the user's folders for RomM.
-  Method `links` (user's setup): RomM's roms folder = links folder (default: parent of the download
+  Method `links`: RomM's roms folder = links folder (default: parent of the download
   folder, e.g. /romm with downloads in /romm/lolroms); `apply_links()` keeps relative symlinks
   `<slug> -> lolroms/<mount>` after every sync (`Engine._update_romm_links`) and only ever changes
   links pointing into the download folder; config.yml adds `exclude.platforms: [lolroms]`.
@@ -169,3 +169,8 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   bytes go out; otherwise the client can reuse a slot before the server notices and tests flake.
 - Windows: `fs_path()` adds the `\\?\` prefix for long paths; `safe_segment()` strips `<>:"|?*`
   and reserved names (CON, NUL, COM1 ...).
+
+## Privacy
+- Never put the owner's real server paths, share names, drive letters, time zone, IP addresses,
+  user names or keys into the repository (code, docs, tests, changelog, commit messages). Use
+  generic examples: `/path/to/roms`, `/path/to/appdata/rom-sync`, `D:\Roms`, `America/New_York`.

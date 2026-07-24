@@ -1,6 +1,6 @@
 @echo off
 rem Rom Sync for Windows - double-click to start, then use the page that opens in your browser.
-rem Options go after the name, e.g.:  start.bat --data F:\Roms     (start.bat --help lists them all)
+rem Options go after the name, e.g.:  start.bat --data D:\Roms     (start.bat --help lists them all)
 setlocal
 cd /d "%~dp0"
 

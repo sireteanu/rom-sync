@@ -15,7 +15,7 @@ BRANCH="${BRANCH:-main}"
 BASE="${BASE:-/path/to/appdata/rom-sync}"     # this script, the source and the config live here
 DATA="${DATA:-/path/to/roms}"                 # where synced files go
 PORT="${PORT:-8484}"
-TZ="${TZ:-America/Toronto}"
+TZ="${TZ:-America/New_York}"
 NAME="${NAME:-rom-sync}"
 
 SRC="$BASE/src"

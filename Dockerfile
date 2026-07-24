@@ -14,7 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PGID=100 \
     UMASK=000
 
-# tzdata: TZ (e.g. America/Toronto) drives file dates and the sync schedule
+# tzdata: TZ (e.g. America/New_York) drives file dates and the sync schedule
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/*
 

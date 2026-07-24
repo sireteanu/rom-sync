@@ -81,7 +81,7 @@ The image is built on the server from this GitHub repository; no image registry 
          - PUID=99
          - PGID=100
          - UMASK=000
-         - TZ=America/Toronto
+         - TZ=America/New_York
          - LOLROMS_DATA=/romm/lolroms                   # downloads go here
          # - LOLROMS_PASSWORD=change-me
        labels:
@@ -105,7 +105,7 @@ when started by hand).
 1. Install Python 3.9+ (tick "Add python.exe to PATH").
 2. Double-click **`start.bat`**. The first start creates `.venv` and installs the dependencies; the
    browser then opens `http://localhost:8484/`.
-3. Set the download folder in Settings, or start with `start.bat --data F:\Roms`.
+3. Set the download folder in Settings, or start with `start.bat --data D:\Roms`.
 
 Catalog and settings live in `config\` next to `start.bat`; the log is `config\rom-sync.log`.
 `run.py` is an alternative launcher that keeps its window open on errors.
