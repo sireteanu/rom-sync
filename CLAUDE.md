@@ -132,7 +132,8 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   only once changes are significant - the user decides, so ask before a minor/major bump. Add a `## [x.y.z] - date` section to `CHANGELOG.md` (plain words,
   grouped New / Improved / Fixed / Changed), bump `version` in `pyproject.toml` and
   `src/lolroms_sync/__init__.py`, push; the `Release` workflow creates `v<version>` with that
-  section as its text. Published releases and their changelog sections are never edited.
+  section as its text. Published changelog sections are only edited to correct them (errors, or
+  details that must not be public); the workflow then updates that release's text to match.
   Pushes that only touch tooling/docs (workflows, CLAUDE.md) don't need a version. (This session can't call the
   releases API directly.) `docker.yml` (registry image) runs only when started by hand.
 - `git fetch origin main` before pushing from a shallow clone.
