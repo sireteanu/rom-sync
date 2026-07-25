@@ -642,11 +642,9 @@ let romm = null;
 let rommTab = "compose";
 const ROMM_HELP_LINKS = {
   compose: "For RomM's container: map the links folder as RomM's roms folder (replace its .../romm/library/roms line).",
-  unraid: "For RomM's container: change the path mapped to its roms folder to this one.",
 };
 const ROMM_HELP = {
   compose: "For RomM's container: add these under the RomM service in its docker-compose.yml (next to its other volumes).",
-  unraid: "For RomM's container on Unraid: edit the RomM container, switch to Advanced View and paste this into Extra Parameters.",
   config: "Merge into RomM's config.yml (in its /romm/config folder), keeping your other settings.",
   list: "Every platform RomM knows. Type one of these names into a folder's RomM platform box; click a name to copy it.",
 };

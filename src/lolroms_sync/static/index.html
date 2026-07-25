@@ -154,7 +154,7 @@
 <dialog id="romm-dlg" class="dlg xwide">
   <form method="dialog" class="dlg-head"><h2>RomM library</h2><button class="btn icon" aria-label="Close">✕</button></form>
   <p class="muted small">RomM sees each synced folder under its platform name - through a folder link per platform,
-    or a Docker mount per platform on <b>RomM's own container</b>. Nothing is moved or copied, so syncing keeps working.
+    or a Docker mount per platform in <b>RomM's compose file</b>. Nothing is moved or copied, so syncing keeps working.
     Merge the config into RomM's <code>config.yml</code>, restart RomM and scan its library.</p>
   <label class="field inline"><span>How RomM sees the folders</span>
     <select id="romm-method">
@@ -203,7 +203,6 @@
       <div class="romm-bar">
         <div class="tabs" role="tablist">
           <button class="tab on" data-out="compose" role="tab">RomM compose</button>
-          <button class="tab" data-out="unraid" role="tab">RomM on Unraid</button>
           <button class="tab" data-out="config" role="tab">config.yml</button>
           <button class="tab" data-out="list" role="tab">RomM platforms</button>
         </div>
