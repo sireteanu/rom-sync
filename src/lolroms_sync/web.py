@@ -176,7 +176,7 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
                 "rows": m.rows(), "platforms": m.platforms, "firmware": m.firmware,
                 "warnings": m.warnings(), "summary": m.summary(), "slugs": [{"slug": k, "name": v[0], "family": v[1], "kind": v[2]}
                           for k, v in sorted(romm.PLATFORMS.items())],
-                "outputs": {"compose": m.compose(), "unraid": m.unraid(), "config": m.config_yml()}}
+                "outputs": {"compose": m.compose(), "config": m.config_yml()}}
 
     @app.get("/api/romm")
     async def romm_get():

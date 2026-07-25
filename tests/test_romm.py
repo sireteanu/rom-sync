@@ -82,11 +82,6 @@ def test_variants_off_and_all_files():
     assert "roms/{platform}/MSU-1/{game}" in plat(m(only_synced=False), "snes")["templates"]
 
 
-def test_unraid_extra_parameters():
-    u = m().unraid()
-    assert "--mount 'type=bind,source=/path/to/roms/Nintendo/Super Famicom,target=/romm/library/roms/snes,readonly'" in u
-
-
 def test_check_action():
     assert check_action(" SNES ") == "snes" and check_action("") == "" and check_action("firmware:psx") == "bios:psx"
     for bad in ("super famicom", "bios:", "../x"):
