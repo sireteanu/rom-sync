@@ -151,3 +151,24 @@ def test_links_mode_needs_the_downloads_inside_the_links_folder(tmp_path):
     mp = Mapping(FOLDERS, {"method": "links", "links_dir": str(tmp_path / "other")}, str(tmp_path / "dl"))
     assert mp.data_in_links() is None and mp.link_targets() == {}
     assert any("inside the links folder" in w for w in mp.warnings())
+
+
+def test_exclude_choice_goes_into_romms_exclude_rules():
+    mp = m(map={"Konami - Picno": "exclude", "Nintendo/GameCube/Saves": "exclude"})
+    row = next(r for r in mp.rows() if r["path"] == "Konami - Picno")
+    assert row["kind"] == "skip" and row["excluded"]
+    assert set(mp.excluded_names()) == {"Konami - Picno", "Saves"}
+    y = mp.config_yml()
+    assert '- "Konami - Picno"' in y and '- "Saves"' in y
+    assert not any(p["slug"] == "picno" for p in mp.platforms)
+    from lolroms_sync.romm import check_action
+    assert check_action("Exclude") == "exclude"
+
+
+def test_one_romm_folder_setting_and_old_settings_still_work(tmp_path):
+    data = str(tmp_path / "romm" / "lolroms")
+    new = Mapping(FOLDERS, {"romm_folder": "/path/to/roms/"}, data)
+    assert new.romm_folder_host() == "/path/to/roms" and new.download_host() == "/path/to/roms/lolroms"
+    old = Mapping(FOLDERS, {"host_path": "/path/to/roms/lolroms"}, data)     # saved before 1.2.9
+    assert old.romm_folder_host() == "/path/to/roms" and old.download_host() == "/path/to/roms/lolroms"
+    assert '"/path/to/roms/lolroms/Nintendo/Super Famicom"' in old.compose()

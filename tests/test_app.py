@@ -261,8 +261,10 @@ def test_romm_page_and_choices(site, app_factory):
     assert "roms/atari2600" in d["outputs"]["compose"]
     names = {p["slug"]: p["name"] for p in d["slugs"]}
     assert len(names) > 400 and names["satellaview"] == "Satellaview" and "Super Nintendo" in names["snes"]
-    d = c.post("/api/romm/options", json={"host_path": "/path/to/roms"}).json()
-    assert '"/path/to/roms/Atari/2600"' in d["outputs"]["compose"]
+    d = c.post("/api/romm/options", json={"romm_folder": "/path/to/roms"}).json()
+    # one "RomM folder" setting: the downloads are where they sit inside it (here: .../roms/data)
+    assert d["options"]["download_host"] == "/path/to/roms/data"
+    assert '"/path/to/roms/data/Atari/2600"' in d["outputs"]["compose"]
     d = c.post("/api/romm/map", json={"path": "Atari/2600", "action": "skip"}).json()
     assert "atari2600" not in {p["slug"] for p in d["platforms"]}
     assert c.post("/api/romm/map", json={"path": "Atari/2600", "action": "Not A Slug"}).status_code == 400
@@ -353,3 +355,25 @@ def test_romm_links_follow_each_sync(site, app_factory, tmp_path):
     c.post("/api/romm/map", json={"path": "Atari/2600", "action": "skip"})   # no longer for RomM
     d = c.post("/api/romm/links", json={}).json()
     assert d["applied"]["removed"] == ["atari2600"] and not link.exists()
+
+
+def test_romm_mapper_choices_survive_restarts_and_a_lost_catalog(site, app_factory, tmp_path):
+    c = app_factory(site)
+    scan(c)
+    c.post("/api/romm/map", json={"path": "Atari/2600", "action": "exclude"})
+    c.post("/api/romm/options", json={"layout": "folders", "method": "links"})
+    c.__exit__(None, None, None)                                   # app closed
+    backup = tmp_path / "config" / "romm-mapper.json"
+    assert backup.exists()
+
+    c2 = app_factory(site)                                         # restarted: still there
+    d = c2.get("/api/romm").json()
+    assert d["options"]["layout"] == "folders" and d["options"]["method"] == "links"
+    assert c2.get("/api/settings").json()["settings"]["romm"]["map"] == {"Atari/2600": "exclude"}
+    c2.__exit__(None, None, None)
+
+    for f in (tmp_path / "config").glob("catalog.db*"):            # catalog reset / replaced
+        f.unlink()
+    c3 = app_factory(site)
+    assert c3.get("/api/settings").json()["settings"]["romm"]["map"] == {"Atari/2600": "exclude"}
+    assert any("Restored the RomM Mapper settings" in l["msg"] for l in c3.get("/api/status").json()["log"])

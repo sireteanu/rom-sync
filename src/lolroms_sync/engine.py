@@ -85,6 +85,7 @@ class Engine:
         self.logbuf = LogBuffer()
         log.addHandler(self.logbuf)
         log.setLevel(logging.DEBUG)
+        self._restore_romm_backup()           # after the log is set up, so it shows in the page
         self.job: Optional[dict] = None
         self.task: Optional[asyncio.Task] = None
         self.scanner: Optional[Scanner] = None
@@ -99,6 +100,20 @@ class Engine:
         self.scheduler: Optional[asyncio.Task] = None
         self.next_run: Optional[float] = None
         self.shutting_down = False
+
+    def _restore_romm_backup(self) -> None:
+        """RomM Mapper choices live in the catalog and in <config>/romm-mapper.json. If the catalog
+        lost them (reset or replaced), bring them back from the file; otherwise refresh the file."""
+        from . import romm
+        cur = self.catalog.settings().get("romm") or {}
+        if cur:
+            romm.write_backup(self.config_dir, cur)
+            return
+        saved = romm.read_backup(self.config_dir)
+        if saved:
+            self.catalog.save_settings({"romm": saved})
+            log.info("Restored the RomM Mapper settings (%d folder choices) from %s",
+                     len(saved.get("map") or {}), romm.BACKUP_FILE)
 
     # ------------------------------------------------------------------ settings
     @property

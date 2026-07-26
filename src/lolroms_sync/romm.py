@@ -33,7 +33,9 @@ from typing import Optional
 from .romm_slugs import PLATFORMS, SLUGS  # noqa: F401 (PLATFORMS is used by web.py)
 
 DEFAULT_OPTIONS = {
-    "host_path": "",              # where the download folder is on the Docker host, e.g. /path/to/roms
+    "romm_folder": "",            # RomM's roms folder on the server, e.g. /path/to/roms; Rom Sync's
+                                  # download folder is inside it (e.g. .../roms/lolroms)
+    "host_path": "",              # older setting: the download folder on the server (still read)
     "library": "/romm/library",  # RomM's library folder inside its container
     "only_synced": True,          # only folders that have files on disk (a mount of a missing folder
                                   # makes Docker create an empty one)
@@ -176,7 +178,7 @@ def check_action(action: str) -> str:
     low = a.lower()
     if low in ("", "auto", "default"):
         return ""
-    if low in ("skip", "merge"):
+    if low in ("skip", "merge", "exclude"):
         return low
     if low.startswith("bios:") or low.startswith("firmware:"):
         slug = low.split(":", 1)[1].strip()
@@ -226,6 +228,8 @@ class Mapping:
             r = {"kind": UNMAPPED, "slug": "", "source": source if action else "auto"}
             if action == "skip":
                 r["kind"] = SKIP
+            elif action == "exclude":                 # skipped, and its name goes into RomM's
+                r.update(kind=SKIP, excluded=True)     # exclude rules in config.yml
             elif action == "merge":
                 if up and up["kind"] in (PLATFORM, MERGE):
                     r.update(kind=MERGE, slug=up["slug"])
@@ -244,6 +248,10 @@ class Mapping:
             elif up and up["kind"] in (SKIP, BIOS):
                 r.update(kind=up["kind"], slug=up["slug"])
             self.res[path] = r
+
+    def excluded_names(self) -> list:
+        """Folder names you marked "exclude": always written to RomM's exclude rules."""
+        return sorted({name_of(p) for p, r in self.res.items() if r.get("excluded")}, key=str.casefold)
 
     def _counts(self, path):
         files, have = self.folders.get(path, (0, 0))
@@ -340,6 +348,7 @@ class Mapping:
             if not files and path not in self.user and path not in RULES:
                 continue
             row = {"path": path, "files": files, "synced": have, "kind": r["kind"], "slug": r["slug"],
+                   "excluded": bool(r.get("excluded")),
                    "source": r["source"], "action": self.user.get(path, ""), "rule": RULES.get(path, ""),
                    "used": r["kind"] in (PLATFORM, MERGE, BIOS) and self._uses(path)}
             if r["kind"] in (PLATFORM, MERGE) and r["slug"] not in SLUGS:
@@ -374,9 +383,9 @@ class Mapping:
             if self.firmware:
                 w.append("Firmware isn't linked (RomM's bios folder is separate): copy these to RomM's bios "
                          "folder: " + ", ".join(f["mount"] for f in self.firmware))
-        if not self.opt["host_path"]:
-            w.append("Set the download folder's path on your server (e.g. /path/to/roms) so the mounts "
-                     "point at the right place.")
+        if not self.romm_folder_host():
+            w.append("Set the RomM folder (the folder on your server RomM uses as its roms folder, e.g. "
+                     "/path/to/roms) so the paths below are right.")
         return w
 
     # ------------------------------------------------------------------ outputs
@@ -405,17 +414,34 @@ class Mapping:
             return {}
         return {p["slug"]: inside + ("/" + p["mount"] if p["mount"] else "") for p in self.platforms}
 
+    def romm_folder_host(self) -> str:
+        """RomM's roms folder on the server (the "RomM folder" setting). Older settings stored the
+        download folder instead; then it's that folder's parent (as many levels as it's nested)."""
+        f = (self.opt.get("romm_folder") or "").strip().rstrip("/\\")
+        if f:
+            return f
+        old = (self.opt.get("host_path") or "").strip().rstrip("/\\")
+        inside = self.data_in_links()
+        if not old or not inside:
+            return old
+        if old.endswith("/" + inside):
+            return old[: -len(inside) - 1]
+        return posixpath.normpath(old + "/" + "/".join([".."] * (inside.count("/") + 1)))
+
+    def download_host(self) -> str:
+        """Rom Sync's download folder on the server: the RomM folder + the download folder's place in it."""
+        base = self.romm_folder_host()
+        inside = self.data_in_links()
+        if not base:
+            return "/path/to/romm/" + (inside or "downloads")
+        return base + ("/" + inside if inside else "")
+
     def _links_host(self) -> str:
         """The links folder as the Docker host sees it (RomM's roms folder)."""
-        base = (self.opt["host_path"] or "/path/to/downloads").rstrip("/\\")
-        inside = self.data_in_links()
-        if not inside:
-            return base
-        return posixpath.normpath(base + "/" + "/".join([".."] * (inside.count("/") + 1)))
+        return self.romm_folder_host() or "/path/to/romm"
 
     def _source(self, path: str) -> str:
-        base = (self.opt["host_path"] or "/path/to/downloads").rstrip("/\\")
-        return base + ("/" + path if path else "")
+        return self.download_host() + ("/" + path if path else "")
 
     def _mounts(self):
         lib = self.opt["library"].rstrip("/")
@@ -442,7 +468,8 @@ class Mapping:
         q = lambda s: json.dumps(s, ensure_ascii=False)  # noqa: E731 - JSON strings are valid YAML
         lines = ["# RomM config.yml - generated by Rom Sync. Merge these sections into your config.yml",
                  "# (keep your other settings). Library: Rom Sync's folders mounted at roms/<platform>.", ""]
-        names = sorted({n for p in self.platforms for n in p["exclude"]}, key=str.casefold)
+        names = sorted({n for p in self.platforms for n in p["exclude"]} | set(self.excluded_names()),
+                       key=str.casefold)
         inside = self.data_in_links() if self.links else None
         if inside:
             lines += ["exclude:", "  # the download folder itself is not a platform (its platforms are linked)",
@@ -473,6 +500,30 @@ class Mapping:
     def summary(self) -> dict:
         return {"platforms": len(self.platforms), "firmware": len(self.firmware),
                 "files": sum(p["files"] for p in self.platforms)}
+
+
+BACKUP_FILE = "romm-mapper.json"
+
+
+def write_backup(config_dir: str, opts: dict) -> None:
+    """Keep a copy of the RomM Mapper settings next to the catalog (written atomically)."""
+    path = os.path.join(config_dir, BACKUP_FILE)
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(opts, f, ensure_ascii=False, indent=1, sort_keys=True)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def read_backup(config_dir: str) -> dict:
+    try:
+        with open(os.path.join(config_dir, BACKUP_FILE), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 def apply_links(m: "Mapping") -> dict:
@@ -555,13 +606,13 @@ def main(argv=None) -> int:
     ap.add_argument("what", nargs="?", choices=("compose", "config", "all"), default="all")
     ap.add_argument("--config", default=os.environ.get("LOLROMS_CONFIG") or "config",
                     help="Rom Sync's config folder (holds catalog.db)")
-    ap.add_argument("--host-path", help="the download folder's path on the Docker host (overrides the saved one)")
+    ap.add_argument("--host-path", help="RomM's roms folder on the Docker host, e.g. /path/to/roms (overrides the saved one)")
     a = ap.parse_args(argv)
     cat = Catalog(os.path.join(a.config, "catalog.db"))
     s = cat.settings()
     opt = options_from(s)
     if a.host_path:
-        opt["host_path"] = a.host_path
+        opt["romm_folder"] = a.host_path
     m = Mapping(folders_from_catalog(cat, parse_types(s["types"])), opt, s["data_dir"])
     parts = {"compose": m.compose, "config": m.config_yml}
     for k in (parts if a.what == "all" else [a.what]):

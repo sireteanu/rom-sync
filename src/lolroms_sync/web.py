@@ -169,14 +169,21 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
         s = e.catalog.settings()
         opt = romm.options_from(s)
         m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])), opt, s["data_dir"])
-        return {"options": {k: opt[k] for k in ("host_path", "library", "only_synced", "variants", "layout",
-                                                 "method", "links_dir")},
+        return {"options": {**{k: opt[k] for k in ("library", "only_synced", "variants", "layout",
+                                                 "method", "links_dir")}, "romm_folder": m.romm_folder_host(),
+                            "download_host": m.download_host()},
                 "links": {"dir": m.links_dir, "download_dir": m.data_dir, "inside": m.data_in_links(),
                           "targets": m.link_targets() if m.links else {}},
                 "rows": m.rows(), "platforms": m.platforms, "firmware": m.firmware,
                 "warnings": m.warnings(), "summary": m.summary(), "slugs": [{"slug": k, "name": v[0], "family": v[1], "kind": v[2]}
                           for k, v in sorted(romm.PLATFORMS.items())],
                 "outputs": {"compose": m.compose(), "config": m.config_yml()}}
+
+    def save_romm(e: Engine, cur: dict) -> None:
+        """Save RomM Mapper choices in the catalog, plus a backup file next to it that is restored
+        if the catalog is ever reset or replaced."""
+        e.catalog.save_settings({"romm": cur})
+        romm.write_backup(e.config_dir, cur)
 
     @app.get("/api/romm")
     async def romm_get():
@@ -186,9 +193,11 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
     async def romm_options(values: dict = Body(...)):
         e = eng()
         cur = dict(e.catalog.settings().get("romm") or {})
-        for k in ("host_path", "library"):
+        for k in ("romm_folder", "library"):
             if k in values:
                 cur[k] = str(values[k] or "").strip()
+        if "romm_folder" in values:
+            cur.pop("host_path", None)                 # replaced by the RomM folder
         for k in ("only_synced", "variants"):
             if k in values:
                 cur[k] = bool(values[k])
@@ -200,7 +209,7 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
             cur["links_dir"] = str(values["links_dir"] or "").strip()
         if not cur.get("library"):
             cur.pop("library", None)
-        e.catalog.save_settings({"romm": cur})
+        save_romm(e, cur)
         return romm_view(e)
 
     @app.post("/api/romm/map")
@@ -217,7 +226,7 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
         else:
             mapping.pop(path, None)
         cur["map"] = mapping
-        e.catalog.save_settings({"romm": cur})
+        save_romm(e, cur)
         return romm_view(e)
 
     @app.post("/api/romm/links")
