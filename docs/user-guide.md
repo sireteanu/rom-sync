@@ -167,8 +167,7 @@ Click **Create / update links now** the first time. (Rom Sync's own compose file
 `/path/to/roms` and download into its `lolroms` subfolder - the example compose file
 does.)
 
-*A Docker mount per platform*: copy the **RomM compose** (or **RomM on Unraid**) tab into RomM's
-container settings instead.
+*A Docker mount per platform*: copy the **RomM compose** tab into RomM's compose file instead.
 
 **Step 3 - the config file.** Copy the **config.yml** tab and merge it into RomM's `config.yml`
 (in RomM's config folder), keeping your other settings. It tells RomM which subfolders belong to a

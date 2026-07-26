@@ -221,7 +221,7 @@ Arcade boards without a RomM slug (Naomi, Atomiswave, Chihiro…) become custom 
   folder must be inside the links folder (default links folder: its parent).
   Firmware isn't linked (RomM's bios folder is separate).
 - **A Docker mount per platform**: the dialog writes read-only bind mounts for RomM's container
-  (docker-compose `volumes:` or Unraid *Extra Parameters*), including firmware to `bios/<slug>`.
+  (docker-compose `volumes:`), including firmware to `bios/<slug>`.
 
 ### The generated `config.yml`
 
@@ -257,9 +257,13 @@ system:
 - Because of the global exclude list, a needed folder whose name is excluded elsewhere gets an extra
   exact-name template, and a platform where a wildcard would read unwanted files falls back to
   exact names.
+- RomM can't be pointed at a nested folder by `config.yml` alone: a per-platform template must use
+  `{platform}` (or the platform's own key) as the platform folder, and all platform folders must sit
+  directly in one folder - so `"snes": "roms/Super Famicom/{game}"` is refused. The links (or mounts)
+  provide those folders.
 - Options: download folder on the server (host path), RomM library path in its container
   (`/romm/library`), only folders with synced files (default on).
-- Command line: `python -m lolroms_sync.romm --config config [compose|unraid|config]`.
+- Command line: `python -m lolroms_sync.romm --config config [compose|config]`.
 
 ---
 

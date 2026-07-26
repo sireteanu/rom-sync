@@ -5,6 +5,12 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-07-26
+
+### Changed
+- The RomM dialog no longer has a **RomM on Unraid** tab; use the **RomM compose** tab (RomM's
+  compose file).
+
 ## [1.2.7] - 2026-07-21
 
 ### New
