@@ -24,7 +24,7 @@
     <button id="btn-scan" class="btn" title="Read every folder listing on lolroms.com (no files are downloaded)">Scan site</button>
     <button id="btn-sync" class="btn primary" title="Download new, incomplete and changed files in the ticked folders">Sync selected</button>
     <button id="btn-stop" class="btn danger" disabled>Stop</button>
-    <button id="btn-romm" class="btn" title="Show your synced folders to RomM, without moving them">RomM</button>
+    <button id="btn-romm" class="btn" title="Map your synced folders to RomM platforms, without moving them">RomM Mapper</button>
     <div class="power">
       <button id="btn-power" class="btn icon" title="Restart or shut down" aria-label="Restart or shut down Rom Sync"
               aria-haspopup="menu" aria-expanded="false" aria-controls="power-menu">
@@ -152,14 +152,14 @@
 </dialog>
 
 <dialog id="romm-dlg" class="dlg xwide">
-  <form method="dialog" class="dlg-head"><h2>RomM library</h2><button class="btn icon" aria-label="Close">✕</button></form>
+  <form method="dialog" class="dlg-head"><h2>RomM Mapper</h2><button class="btn icon" aria-label="Close">✕</button></form>
   <p class="muted small">RomM sees each synced folder under its platform name - through a folder link per platform,
     or a Docker mount per platform in <b>RomM's compose file</b>. Nothing is moved or copied, so syncing keeps working.
     Merge the config into RomM's <code>config.yml</code>, restart RomM and scan its library.</p>
   <label class="field inline"><span>How RomM sees the folders</span>
     <select id="romm-method">
       <option value="links">Platform links in one folder - RomM needs a single folder mapping</option>
-      <option value="mounts">A Docker mount per platform on RomM's container</option>
+      <option value="mounts">A Docker mount per platform in RomM's compose file</option>
     </select></label>
   <div id="romm-links" class="links-box" hidden>
     <div class="row2">
@@ -170,12 +170,8 @@
     </div>
     <p id="romm-applied" class="small muted" hidden></p>
   </div>
-  <div class="row2">
-    <label class="field"><span>Download folder on the server</span><input id="romm-host" placeholder="/path/to/roms">
-      <small>The folder Rom Sync saves to, as the RomM container's host sees it.</small></label>
-    <label class="field"><span>RomM library in its container</span><input id="romm-lib" placeholder="/romm/library">
-      <small>Leave as is unless you changed RomM's library path.</small></label>
-  </div>
+  <label class="field"><span>RomM folder</span><input id="romm-host" placeholder="/path/to/roms">
+    <small id="romm-host-hint">The folder on your server that RomM uses as its roms folder. Rom Sync's downloads are inside it.</small></label>
   <label class="check"><input type="checkbox" id="romm-only"> Only folders with synced files (Docker would create missing ones empty)</label>
   <label class="check"><input type="checkbox" id="romm-var"> Include subfolders such as T-En, hacks and add-ons in their platform</label>
   <label class="field inline"><span>Subfolders in config.yml</span>
@@ -188,29 +184,30 @@
     <section>
       <div class="romm-bar">
         <h3 id="romm-count">Folders</h3>
-        <select id="romm-filter" aria-label="Show">
-          <option value="todo">Needs a platform</option><option value="used">In RomM</option><option value="all">All folders</option>
-        </select>
-        <input id="romm-find" type="search" placeholder="Find" aria-label="Find a folder">
       </div>
       <div class="romm-wrap"><table class="files romm"><thead><tr><th>Folder</th><th>Files</th><th>RomM platform</th><th>Result</th></tr></thead>
         <tbody id="romm-body"></tbody></table></div>
-      <datalist id="romm-slugs"></datalist>
-      <p class="muted small">Type a RomM platform (e.g. <code>snes</code>), <code>merge</code> (into the platform above),
-        <code>bios:psx</code> (firmware) or <code>skip</code>. Clear it to go back to the default.</p>
+      <p class="muted small">Pick a RomM platform for a folder, or: <b>merge</b> (its games join the platform above),
+        a <b>firmware</b> entry, <b>skip</b> (leave it out), or <b>exclude</b> (leave it out and add its name to RomM's
+        exclude rules). <b>Default</b> goes back to the built-in choice. Every choice is saved right away.</p>
     </section>
     <section>
       <div class="romm-bar">
+        <span class="muted small">Output</span>
         <div class="tabs" role="tablist">
           <button class="tab on" data-out="compose" role="tab">RomM compose</button>
           <button class="tab" data-out="config" role="tab">config.yml</button>
-          <button class="tab" data-out="list" role="tab">RomM platforms</button>
         </div>
         <button id="romm-copy" class="btn small">Copy</button>
+        <button class="ref-btn" data-out="list" aria-pressed="false" title="Every platform RomM knows">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm2 2v11a1 1 0 0 0 1 1h7V7a1 1 0 0 0-1-1H7Zm12 1h2v15H9v-2h10V7Z"/></svg>
+          RomM platforms list
+        </button>
       </div>
       <p id="romm-help" class="muted small"></p>
       <pre id="romm-out" class="out"></pre>
-      <div id="romm-list" hidden>
+      <div id="romm-list" class="ref-panel" hidden>
+        <div class="ref-head"><b>Reference</b> <span class="muted small">- every platform RomM knows. Click a name to copy it.</span></div>
         <input id="romm-list-find" type="search" placeholder="Find a platform, e.g. famicom or Sega" aria-label="Find a RomM platform">
         <div class="romm-wrap"><table class="files romm-all"><thead><tr><th>RomM platform</th><th>Name</th><th>Maker</th><th>Your folders</th></tr></thead>
           <tbody id="romm-list-body"></tbody></table></div>

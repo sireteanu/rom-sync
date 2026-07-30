@@ -292,3 +292,15 @@ table.romm-all tr.in-use td:nth-child(2) { font-weight: 600; }
 .links-box { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 12px; margin: 6px 0; background: var(--field); }
 .links-box[hidden] { display: none; }
 .links-box .field input { background: var(--shell); }
+
+/* RomM Mapper: folder choice dropdowns and the reference list */
+table.romm select.act { font: 12.5px var(--font); padding: 4px 6px; border-radius: var(--radius-s); width: 200px;
+  border: 1px solid var(--line); background: var(--field); color: var(--ink); }
+.ref-btn { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font: 600 12.5px var(--font);
+  color: var(--grape-ink); background: none; border: 1px dashed var(--grape-ink); border-radius: 99px; padding: 4px 12px; cursor: pointer; }
+.ref-btn svg { width: 14px; height: 14px; fill: currentColor; }
+.ref-btn:hover, .ref-btn.on { background: var(--grape-soft); border-style: solid; }
+:root:not([data-theme="light"]) .ref-btn:hover, :root:not([data-theme="light"]) .ref-btn.on { background: #b9a6f21f; }
+.ref-panel { border: 1px solid var(--grape-ink); border-left-width: 4px; border-radius: var(--radius-s); padding: 10px; }
+.ref-head { margin-bottom: 8px; }
+table.romm td.p { max-width: 200px; }

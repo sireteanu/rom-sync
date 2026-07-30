@@ -646,48 +646,88 @@ const ROMM_HELP_LINKS = {
 const ROMM_HELP = {
   compose: "For RomM's container: add these under the RomM service in its docker-compose.yml (next to its other volumes).",
   config: "Merge into RomM's config.yml (in its /romm/config folder), keeping your other settings.",
-  list: "Every platform RomM knows. Type one of these names into a folder's RomM platform box; click a name to copy it.",
+  list: "",
 };
+/* a folder's choice as a dropdown. Filled with only the current choice at first (hundreds of rows x
+   hundreds of platforms would be slow) and with every choice when it's opened. */
+function rommDefaultLabel(r) {
+  if (r.rule) return r.rule.startsWith("bios:") ? "firmware for " + r.rule.slice(5) : r.rule;
+  if (r.source === "auto" || !r.action) {
+    if (r.kind === "merge") return "merge into " + r.slug;
+    if (r.kind === "bios") return "firmware for " + r.slug;
+    if (r.kind === "skip") return "skip";
+  }
+  return "no platform";
+}
+function rommOptionLabel(v) {
+  if (v === "merge") return "merge - into the platform above";
+  if (v === "skip") return "skip - leave out";
+  if (v === "exclude") return "exclude - leave out + RomM exclude rule";
+  if (v.startsWith("bios:")) return "firmware for " + v.slice(5);
+  const p = romm.slugs.find((x) => x.slug === v);
+  return p ? `${v} - ${p.name}` : v;
+}
+function fillRommChoice(sel, r, value, full) {
+  sel.innerHTML = "";
+  const add = (parent, v, label) => { const o = document.createElement("option"); o.value = v; o.textContent = label; parent.append(o); return o; };
+  add(sel, "", "Default: " + rommDefaultLabel(r));
+  if (!full) {
+    if (value) add(sel, value, rommOptionLabel(value));
+  } else {
+    const g1 = document.createElement("optgroup"); g1.label = "Choices"; sel.append(g1);
+    for (const v of ["merge", "skip", "exclude"]) add(g1, v, rommOptionLabel(v));
+    const g2 = document.createElement("optgroup"); g2.label = "RomM platforms"; sel.append(g2);
+    for (const p of romm.slugs) add(g2, p.slug, `${p.slug} - ${p.name}`);
+    const g3 = document.createElement("optgroup"); g3.label = "Firmware for"; sel.append(g3);
+    for (const p of romm.slugs) add(g3, "bios:" + p.slug, `firmware for ${p.slug} - ${p.name}`);
+    if (value && ![...sel.options].some((o) => o.value === value)) add(sel, value, value);   // a custom platform
+    sel.dataset.full = "1";
+  }
+  sel.value = value || "";
+}
+
 function rommResult(r) {
   if (r.kind === "platform") return [r.used ? `roms/${r.slug}` : `roms/${r.slug} (nothing synced)`, r.custom ? "warn" : "ok"];
   if (r.kind === "merge") return [r.used ? `in ${r.slug}` : `in ${r.slug} (nothing synced)`, "ok"];
   if (r.kind === "bios") return [`firmware: bios/${r.slug}`, "ok"];
-  if (r.kind === "skip") return ["skipped", "none"];
+  if (r.kind === "skip") return [r.excluded ? "excluded in RomM" : "skipped", "none"];
   return ["no platform", "bad"];
 }
 function renderRomm() {
   const d = romm;
-  const f = $("#romm-filter").value, q = $("#romm-find").value.trim().toLowerCase();
   const body = $("#romm-body");
+  const wrap = body.closest(".romm-wrap"), scroll = wrap ? wrap.scrollTop : 0;
+  const active = document.activeElement;      // the table is rebuilt after every save: keep focus
+  const keep = active && active.classList.contains("act") && body.contains(active) ? active.dataset.path : null;
   body.innerHTML = "";
-  const rows = d.rows.filter((r) => (f === "all" || (f === "used" ? r.used : (r.kind === "unmapped" && r.files)))
-    && (!q || r.path.toLowerCase().includes(q)));
+  const rows = d.rows;
   for (const r of rows) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="p"></td><td class="n"></td><td><input class="act" list="romm-slugs" spellcheck="false"></td><td class="res"></td>`;
+    tr.innerHTML = `<td class="p"></td><td class="n"></td><td><select class="act"></select></td><td class="res"></td>`;
     tr.children[0].textContent = r.path;
     tr.children[0].title = r.path;
     tr.children[1].textContent = r.synced && r.synced !== r.files ? `${num(r.synced)} / ${num(r.files)}` : num(r.files);
-    const inp = $(".act", tr);
-    inp.value = r.action;
-    inp.placeholder = r.rule || (r.kind === "merge" ? "merge" : r.kind === "skip" ? "skip" : r.kind === "bios" ? "bios:" + r.slug : "");
-    inp.setAttribute("aria-label", `RomM platform for ${r.path}`);
-    inp.addEventListener("change", () => rommMap(r.path, inp.value));
+    const sel = $(".act", tr);
+    sel.dataset.path = r.path;
+    const value = r.path in rommPending ? rommPending[r.path].value : r.action;
+    fillRommChoice(sel, r, value, false);                // just the current choice until it's opened
+    const full = () => { if (!sel.dataset.full) fillRommChoice(sel, r, sel.value, true); };
+    sel.addEventListener("pointerdown", full);
+    sel.addEventListener("focus", full);
+    sel.addEventListener("keydown", full);
+    sel.setAttribute("aria-label", `RomM platform for ${r.path}`);
+    sel.addEventListener("change", () => rommQueue(r.path, sel.value, true));
     const [text, cls] = rommResult(r);
     const res = tr.children[3];
     res.textContent = text;
     res.className = "res st-" + cls;
-    if (r.kind === "unmapped" && r.suggest) {
-      const b = document.createElement("button");
-      b.className = "btn small ghost"; b.textContent = "Use";
-      b.addEventListener("click", () => rommMap(r.path, r.suggest));
-      res.append(" ", b);
-    }
     body.append(tr);
+    if (keep === r.path) sel.focus({ preventScroll: true });
   }
-  if (!rows.length) body.innerHTML = `<tr><td colspan="4" class="muted">${f === "todo" ? "Every folder with files has a platform or is skipped." : "No folders."}</td></tr>`;
+  if (wrap) wrap.scrollTop = scroll;
+  if (!rows.length) body.innerHTML = `<tr><td colspan="4" class="muted">No folders - scan the site first.</td></tr>`;
   const s = d.summary;
-  $("#romm-count").textContent = `${num(s.platforms)} platforms, ${num(s.firmware)} firmware, ${num(s.files)} files`;
+  $("#romm-count").textContent = `${num(rows.length)} folders: ${num(s.platforms)} platforms, ${num(s.firmware)} firmware, ${num(s.files)} files`;
   const w = $("#romm-warn");
   w.innerHTML = "";
   for (const t of d.warnings) { const li = document.createElement("li"); li.textContent = t; w.append(li); }
@@ -706,6 +746,9 @@ function renderRomm() {
       : `The download folder (${d.links.download_dir}) must be inside the links folder.`;
   }
   for (const t of document.querySelectorAll("#romm-dlg .tab")) t.classList.toggle("on", t.dataset.out === rommTab);
+  const ref = $("#romm-dlg .ref-btn");
+  ref.classList.toggle("on", isList);
+  ref.setAttribute("aria-pressed", String(isList));
 }
 function renderRommList() {
   const q = $("#romm-list-find").value.trim().toLowerCase();
@@ -735,27 +778,54 @@ $("#romm-list-find").addEventListener("input", renderRommList);
 
 function rommLoad(d) {
   romm = d;
-  $("#romm-host").value = d.options.host_path || "";
-  $("#romm-lib").value = d.options.library || "";
+  $("#romm-host").value = d.options.romm_folder || "";
+  $("#romm-host-hint").textContent = d.options.romm_folder
+    ? `RomM's roms folder on your server. Rom Sync's downloads are in ${d.options.download_host}.`
+    : "The folder on your server that RomM uses as its roms folder, e.g. /path/to/roms. Rom Sync's downloads are inside it.";
   $("#romm-only").checked = !!d.options.only_synced;
   $("#romm-var").checked = !!d.options.variants;
   $("#romm-layout").value = d.options.layout || "category";
   $("#romm-method").value = d.options.method || "mounts";
   $("#romm-linkdir").value = d.options.links_dir || "";
-  const dl = $("#romm-slugs");
-  if (!dl.children.length) {
-    for (const v of ["skip", "merge"]) { const o = document.createElement("option"); o.value = v; dl.append(o); }
-    for (const p of d.slugs) { const o = document.createElement("option"); o.value = p.slug; o.label = p.name; dl.append(o); }
-  }
   renderRomm();
 }
-async function rommMap(path, action) {
-  try { rommLoad(await api("/api/romm/map", { method: "POST", body: { path, action } })); }
-  catch (e) { alert(e.message); renderRomm(); }
+/* saving folder choices: debounced while typing, immediately on Enter / leaving the box, and any
+   unsaved choice is sent when the dialog closes (also with Esc) */
+const rommPending = {};          // path -> {value, timer}
+function rommQueue(path, value, now = false) {
+  const p = rommPending[path] || (rommPending[path] = {});
+  p.value = value;
+  clearTimeout(p.timer);
+  if (now) rommSave(path); else p.timer = setTimeout(() => rommSave(path), 700);
 }
+async function rommSave(path) {
+  const p = rommPending[path];
+  if (!p) return;
+  clearTimeout(p.timer);
+  const value = p.value;
+  try {
+    const d = await api("/api/romm/map", { method: "POST", body: { path, action: value } });
+    if (rommPending[path] && rommPending[path].value === value) delete rommPending[path];
+    rommLoad(d);
+  } catch (e) {
+    delete rommPending[path];
+    alert(`Not saved for ${path}: ${e.message}`);
+    renderRomm();
+  }
+}
+function rommFlush() {
+  for (const [path, p] of Object.entries(rommPending)) {
+    clearTimeout(p.timer);
+    fetch("/api/romm/map", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, action: p.value }) }).catch(() => {});
+    delete rommPending[path];
+  }
+}
+$("#romm-dlg").addEventListener("close", rommFlush);
+window.addEventListener("pagehide", rommFlush);
 async function rommOptions() {
   rommLoad(await api("/api/romm/options", { method: "POST", body: {
-    host_path: $("#romm-host").value, library: $("#romm-lib").value,
+    romm_folder: $("#romm-host").value,
     only_synced: $("#romm-only").checked, variants: $("#romm-var").checked,
     layout: $("#romm-layout").value, method: $("#romm-method").value,
     links_dir: $("#romm-linkdir").value } }));
@@ -777,10 +847,10 @@ $("#romm-apply").addEventListener("click", async () => {
   } catch (e) { out.textContent = "Could not update the links: " + e.message; out.className = "small error"; out.hidden = false; }
   b.disabled = false;
 });
-for (const id of ["#romm-host", "#romm-lib", "#romm-only", "#romm-var", "#romm-layout", "#romm-method", "#romm-linkdir"]) $(id).addEventListener("change", rommOptions);
-$("#romm-filter").addEventListener("change", renderRomm);
-$("#romm-find").addEventListener("input", renderRomm);
-for (const t of document.querySelectorAll("#romm-dlg .tab")) t.addEventListener("click", () => { rommTab = t.dataset.out; renderRomm(); });
+for (const id of ["#romm-host", "#romm-only", "#romm-var", "#romm-layout", "#romm-method", "#romm-linkdir"]) $(id).addEventListener("change", rommOptions);
+let rommOutTab = "compose";
+for (const t of document.querySelectorAll("#romm-dlg .tab")) t.addEventListener("click", () => { rommTab = rommOutTab = t.dataset.out; renderRomm(); });
+$("#romm-dlg .ref-btn").addEventListener("click", () => { rommTab = rommTab === "list" ? rommOutTab : "list"; renderRomm(); });
 $("#romm-copy").addEventListener("click", async () => {
   const text = $("#romm-out").textContent;
   try { await navigator.clipboard.writeText(text); }
