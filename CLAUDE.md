@@ -64,8 +64,10 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
 - **Startup**: a busy port that answers /api/health means Rom Sync already runs -> open it, exit 0.
   Logs also go to `<config>/rom-sync.log`. `run.py` pauses on errors (double-click on Windows)
   and re-launches itself with `.venv` when the current Python lacks the dependencies.
-- **RomM** (`romm.py`, `romm_slugs.py` vendored from rommapp/romm platform_slugs.py): resolves
-  each folder to platform/merge/bios/skip/unmapped from `RULES` + user map (settings `romm`),
+- **RomM Mapper** (`romm.py`, `romm_slugs.py` vendored from rommapp/romm platform_slugs.py): resolves
+  each folder to platform/merge/bios/skip(/exclude)/unmapped from `RULES` + user map (settings `romm`,
+  mirrored to `<config>/romm-mapper.json` and restored from it at start if the catalog lost it;
+  one "RomM folder" (`romm_folder`) = RomM's roms folder on the host, download host path derived),
   groups by slug, mounts the common folder, and writes compose / Unraid / config.yml.
   Layout `category` (default) writes one `{category}`/`{subcategory}` template per depth; every
   subfolder of a folder RomM descends into that isn't wanted goes into the (global, case-insensitive)

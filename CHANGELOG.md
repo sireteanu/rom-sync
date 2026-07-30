@@ -5,6 +5,26 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-07-30
+
+### New
+- **RomM Mapper**: the RomM button and dialog are renamed. Each folder's choice is now a dropdown:
+  Default, merge, skip, **exclude** (new - leaves the folder out and adds its name to RomM's
+  exclude rules in `config.yml`), any RomM platform, or firmware for any platform.
+- A single **RomM folder** setting (RomM's roms folder on your server) replaces "Download folder on
+  the server" and "RomM library in its container"; the download folder's place in it is worked out
+  automatically. Your earlier setting keeps working.
+
+### Improved
+- The folder list shows every folder (no filter or search box needed), and the **RomM platforms
+  list** is now a separate reference panel, set apart from the RomM compose / config.yml output.
+
+### Fixed
+- **RomM Mapper choices are never lost**: each choice is saved the moment it's made (including when
+  the dialog is closed with Esc), the list no longer resets what you were doing when it refreshes,
+  and a backup (`romm-mapper.json` in the config folder) restores them if the catalog is ever reset
+  or replaced.
+
 ## [1.2.8] - 2026-07-26
 
 ### Changed

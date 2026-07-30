@@ -50,7 +50,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 | Progress | Activity panel (counts, speed, parallel downloads), **This sync** box (total size, files left, time remaining), **Downloading** box (one progress bar per file), live log. |
 | Schedule | Optional automatic sync every N hours and a full site scan every N days. |
 | Reliability | A sync cut off by a restart, crash or reboot continues by itself at the next start. Power menu: **Restart** / **Shut down**. Starting a second copy just opens the running one. |
-| RomM | Maps every folder to a RomM platform (built-in rules, editable). Generates RomM's `config.yml`, and either keeps one folder link per platform (one RomM mapping) or writes one Docker mount per platform. |
+| RomM | **RomM Mapper** maps every folder to a RomM platform (built-in rules, editable per folder from a dropdown, including "exclude"). Generates RomM's `config.yml`, and either keeps one folder link per platform (one RomM mapping) or writes one Docker mount per platform. Choices are saved instantly and backed up next to the catalog. |
 | Interface | Dark (default) or light theme, works on a phone, optional password (HTTP Basic), no external resources (works on a LAN without internet for the page itself). |
 
 ---
@@ -178,7 +178,7 @@ downloaded before:
 ### Interface
 
 - Header: title with **version** (links to its release notes), job pill, **Scan site**, **Sync
-  selected**, **Stop**, **RomM**, power menu (**Restart**, **Shut down**), theme toggle, Settings.
+  selected**, **Stop**, **RomM Mapper**, power menu (**Restart**, **Shut down**), theme toggle, Settings.
 - Storage strip, folder tree, Activity (job line, This sync box, counters), Log, Downloading.
 - The page polls `/api/status` every second while busy, every 4 s when idle.
 
@@ -190,12 +190,17 @@ RomM expects one folder per platform, named by its *slug* (`snes`, `psx`…), di
 roms folder. lolroms nests platforms (`Nintendo/Super Famicom/Satellaview`) and keeps variants in
 subfolders (`T-En`, `MSU-1`, `Color`…). Rom Sync bridges this without moving files.
 
-### Mapping folders to platforms (RomM button)
+### Mapping folders to platforms (RomM Mapper button)
 
-Each folder resolves to one of: **platform** (a RomM slug), **merge** (its games join the platform
-above), **bios:slug** (firmware), **skip**, or **no platform**:
+The dialog lists every folder that has files. Each folder resolves to one of: **platform** (a RomM
+slug), **merge** (its games join the platform above), **bios:slug** (firmware), **skip**,
+**exclude** (skipped, and its folder name is always written to RomM's `exclude.roms.multi_file.names`),
+or **no platform**:
 
-1. Your own choice in the dialog (type a slug, `merge`, `bios:psx`, `skip`; clear to reset).
+1. Your own choice, picked from the folder's dropdown (Default, merge, skip, exclude, any RomM
+   platform, firmware for any platform). Saved immediately (`POST /api/romm/map`); stored in the
+   catalog's `romm` setting and mirrored to `<config>/romm-mapper.json`, which is restored
+   automatically if the catalog ever loses them (reset or replaced).
 2. Built-in rules for lolroms' tree (`RULES` in `romm.py`), e.g. `Nintendo/Super Famicom` → `snes`,
    `…/Satellaview` → `satellaview`, `Arcade/MAME` → `arcade`, `Arcade/FBNeo` → skip,
    `Nintendo/amiibo` → skip.
@@ -206,7 +211,7 @@ above), **bios:slug** (firmware), **skip**, or **no platform**:
 Arcade boards without a RomM slug (Naomi, Atomiswave, Chihiro…) become custom platforms with
 `system.versions` pointing them at `arcade`. Several folders mapping to one slug (e.g.
 `APF/Imagination Machine` + `APF/MP-1000` → `apf`) share their nearest common folder. The
-**RomM platforms** tab lists all 459 RomM slugs with names and makers (vendored from RomM's
+**RomM platforms list** (a reference panel, separate from the output tabs) lists all 459 RomM slugs with names and makers (vendored from RomM's
 `platform_slugs.py` and metadata tables, October 2026).
 
 ### How RomM sees the folders
@@ -261,8 +266,10 @@ system:
   `{platform}` (or the platform's own key) as the platform folder, and all platform folders must sit
   directly in one folder - so `"snes": "roms/Super Famicom/{game}"` is refused. The links (or mounts)
   provide those folders.
-- Options: download folder on the server (host path), RomM library path in its container
-  (`/romm/library`), only folders with synced files (default on).
+- Options: **RomM folder** - RomM's roms folder on the server (e.g. `/path/to/roms`); Rom Sync's
+  download folder on the server is derived from it (e.g. `/path/to/roms/lolroms`, from where the
+  download folder sits inside the links folder). RomM's library inside its container is
+  `/romm/library`. Only folders with synced files (default on).
 - Command line: `python -m lolroms_sync.romm --config config [compose|config]`.
 
 ---
@@ -285,7 +292,7 @@ Stored in the catalog (`settings` table); changed in the Settings dialog or `POS
 | `refresh_before_sync` | `true` | Re-read the ticked folders' listings before each sync |
 | `resume_interrupted` | `true` | Continue an unfinished sync when the app starts |
 | `check_remote` | `false` | Ask the server about every existing file (exact, one request per file) |
-| `romm` | `{}` | RomM options: `host_path`, `library`, `only_synced`, `variants`, `layout` (`category`/`folders`), `method` (`links`/`mounts`), `links_dir`, `map` (your folder choices) |
+| `romm` | `{}` | RomM Mapper: `romm_folder`, `only_synced`, `variants`, `layout` (`category`/`folders`), `method` (`links`/`mounts`), `links_dir`, `map` (your folder choices). Older `host_path` (download folder on the server) is still read. Mirrored to `<config>/romm-mapper.json` |
 | `interrupted_job` | `""` | Internal: set while a sync runs |
 
 ---
@@ -317,6 +324,7 @@ answers like Rom Sync, a new start just opens the running copy; otherwise it exp
 |---|---|
 | `<config>/catalog.db` | SQLite (WAL): `dirs`, `files` (listing date/size, local state), `selection` (rules), `settings`, `scans`, `history` |
 | `<config>/rom-sync.log` | Log (rotating, 2 MB × 3) |
+| `<config>/romm-mapper.json` | Backup of the RomM Mapper settings and folder choices (restored if the catalog loses them) |
 | `<data>/<site path>` | Synced files, same folder structure as the site (`Nintendo/Super Famicom/…`) |
 | `<data>/.dir_crawler.db` | Manifest: what the listing said for each saved file, Last-Modified/ETag, per-site parallel limit |
 | `<data>/…/*.part` | Unfinished downloads (resumed later) |

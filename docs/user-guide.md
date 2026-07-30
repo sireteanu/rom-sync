@@ -140,44 +140,50 @@ themselves; new folders arrive too if their parent folder is ticked.
 ## 9. Show your games in RomM
 
 Rom Sync can show your synced folders to [RomM](https://github.com/rommapp/romm) under RomM's
-platform names (`snes`, `psx`, …) without moving or copying anything. Click **RomM** in the header.
+platform names (`snes`, `psx`, …) without moving or copying anything. Click **RomM Mapper** in the
+header.
 
-**Step 1 - check the platforms.** The table lists every folder and the RomM platform it becomes.
-Most are filled in already. *Needs a platform* shows folders that have none; type one (the **RomM
-platforms** tab lists all of them with full names - click a name to copy it), or type:
+**Step 1 - RomM folder.** Enter the folder on your server that RomM uses as its roms folder, for
+example `/path/to/roms`. Rom Sync's downloads are inside it (the hint underneath shows where, for
+example `/path/to/roms/lolroms`).
 
-- `merge` - put this folder's games into the platform above it (translations, hacks, add-ons),
-- `bios:psx` - this folder holds firmware for that platform,
-- `skip` - leave it out of RomM.
+**Step 2 - check the platforms.** The table lists every folder that has files and what it becomes
+in RomM. Most are filled in already. To change one, pick from its dropdown:
 
-Clear a box to go back to the default.
+- a **RomM platform** (all of them are listed with their full names),
+- **merge** - put this folder's games into the platform above it (translations, hacks, add-ons),
+- **firmware for …** - this folder holds BIOS files for that platform,
+- **skip** - leave it out of RomM,
+- **exclude** - leave it out *and* add its name to RomM's exclude rules, so RomM ignores any folder
+  with that name,
+- **Default** - go back to the built-in choice.
 
-**Step 2 - choose how RomM sees the folders.**
+Every choice is saved the moment you make it - closing the dialog, restarting or shutting down
+doesn't lose it. A backup copy is kept next to the catalog and restored automatically if the
+catalog is ever reset. **RomM platforms list** (the button with the book icon) opens a searchable
+reference of every platform RomM knows.
 
-*Platform links in one folder* (recommended). Rom Sync puts one link per platform next to its
-download folder - for example `/path/to/roms/snes` pointing to
-`lolroms/Nintendo/Super Famicom` - and keeps them up to date after every sync. In RomM's compose
-file, map that folder as RomM's roms folder:
+**Step 3 - choose how RomM sees the folders.**
+
+*Platform links in one folder* (recommended). Rom Sync puts one link per platform in the RomM
+folder - for example `/path/to/roms/snes` pointing to `lolroms/Nintendo/Super Famicom` - and keeps
+them up to date after every sync. In RomM's compose file, map the RomM folder as RomM's roms folder:
 
 ```yaml
       - /path/to/roms:/romm/library/roms
 ```
 
-Click **Create / update links now** the first time. (Rom Sync's own compose file must map
-`/path/to/roms` and download into its `lolroms` subfolder - the example compose file
-does.)
+Click **Create / update links now** the first time. (Rom Sync's own compose file must map the RomM
+folder and download into its `lolroms` subfolder - the example compose file does.)
 
 *A Docker mount per platform*: copy the **RomM compose** tab into RomM's compose file instead.
 
-**Step 3 - the config file.** Copy the **config.yml** tab and merge it into RomM's `config.yml`
+**Step 4 - the config file.** Copy the **config.yml** tab and merge it into RomM's `config.yml`
 (in RomM's config folder), keeping your other settings. It tells RomM which subfolders belong to a
-platform (using `{category}` levels, so new subfolders are picked up), which subfolders to ignore,
-and to ignore the `lolroms` folder itself.
+platform (using `{category}` levels, so new subfolders are picked up), which subfolders to ignore
+(including the ones you set to *exclude*), and to ignore the `lolroms` folder itself.
 
-**Step 4** - restart RomM and scan its library.
-
-Set **Download folder on the server** to where the downloads are as the server sees them (for
-example `/path/to/roms/lolroms`), so the generated paths are right.
+**Step 5** - restart RomM and scan its library.
 
 ## 10. Troubleshooting
 
@@ -197,7 +203,7 @@ ticking its subfolders leaves its own files out).
 **"Paused: …" during a sync.** The site's daily limit was reached; the next sync continues.
 
 **A RomM platform is missing.** Make sure the folder has synced files, has a platform in the RomM
-dialog, the links are up to date (Create / update links now), and RomM's `config.yml` has the new
+Mapper, the links are up to date (Create / update links now), and RomM's `config.yml` has the new
 version of the generated section. Then rescan in RomM.
 
 **Something else?** The log (right side, and `rom-sync.log` in the config folder) says what went
