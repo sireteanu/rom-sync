@@ -172,3 +172,24 @@ def test_one_romm_folder_setting_and_old_settings_still_work(tmp_path):
     old = Mapping(FOLDERS, {"host_path": "/path/to/roms/lolroms"}, data)     # saved before 1.2.9
     assert old.romm_folder_host() == "/path/to/roms" and old.download_host() == "/path/to/roms/lolroms"
     assert '"/path/to/roms/lolroms/Nintendo/Super Famicom"' in old.compose()
+
+
+def test_dropdown_values_are_a_platform_or_exclude():
+    rows = {r["path"]: r for r in m().rows()}
+    assert rows["Nintendo/Super Famicom"]["value"] == "snes"
+    assert rows["Nintendo/Super Famicom/T-En"]["value"] == "snes"                  # part of its parent
+    assert rows["Nintendo/Super Famicom/T-En"]["auto"] == "snes"
+    assert rows["Apple/II/A2R"]["value"] == "exclude"                             # flux captures
+    assert rows["Nintendo/GameCube/BIOS"]["value"] == "firmware"                  # automatic
+    assert rows["Konami - Picno"]["value"] == ""                                  # no platform yet
+    mine = {r["path"]: r for r in m(map={"Nintendo/Super Famicom/T-En": "exclude"}).rows()}
+    assert mine["Nintendo/Super Famicom/T-En"]["value"] == "exclude"
+    assert mine["Nintendo/Super Famicom/T-En"]["auto"] == "snes"                  # what "back" means
+
+
+def test_romm_folder_defaults_to_romms_view_of_the_downloads(tmp_path):
+    mp = Mapping(FOLDERS, {"method": "links"}, str(tmp_path / "romm" / "lolroms"))
+    assert mp.romm_folder() == "/romm/library/roms/lolroms" and mp.library() == "/romm/library"
+    assert '/path/on/your/server:/romm/library/roms"' in mp.compose()
+    mp = Mapping(FOLDERS, {"romm_folder": "/romm/data/roms/lolroms"}, str(tmp_path / "romm" / "lolroms"))
+    assert mp.library() == "/romm/data" and any(t.startswith("/romm/data/roms/") for _, t in mp._mounts())

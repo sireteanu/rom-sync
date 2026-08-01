@@ -32,8 +32,12 @@ from typing import Optional
 
 from .romm_slugs import PLATFORMS, SLUGS  # noqa: F401 (PLATFORMS is used by web.py)
 
+DEFAULT_ROMM_FOLDER = "/romm/library/roms/lolroms"
+
 DEFAULT_OPTIONS = {
-    "romm_folder": "",            # RomM's roms folder on the server, e.g. /path/to/roms; Rom Sync's
+    "romm_folder": "",            # where Rom Sync's downloads are inside RomM's container
+                                  # ("" = /romm/library/roms/lolroms); older versions saved
+                                  # RomM's roms folder on the server here (still understood)
                                   # download folder is inside it (e.g. .../roms/lolroms)
     "host_path": "",              # older setting: the download folder on the server (still read)
     "library": "/romm/library",  # RomM's library folder inside its container
@@ -218,36 +222,52 @@ class Mapping:
 
     # ------------------------------------------------------------------ roles
     def _resolve(self):
+        self.auto: dict = {}         # path -> what it would be without your own choice for it
         for path in sorted(self.folders, key=lambda p: (p.count("/"), p)):
             if not path:
                 continue
             up = self.res.get(parent_of(path))
-            action, source = self.user.get(path), "yours"
-            if not action:
-                action, source = RULES.get(path, ""), "rule"
-            r = {"kind": UNMAPPED, "slug": "", "source": source if action else "auto"}
-            if action == "skip":
+            rule = RULES.get(path, "")
+            self.auto[path] = self._decide(path, rule, "rule", up)
+            mine = self.user.get(path)
+            self.res[path] = self._decide(path, mine, "yours", up) if mine else self.auto[path]
+
+    def _decide(self, path: str, action: str, source: str, up: Optional[dict]) -> dict:
+        r = {"kind": UNMAPPED, "slug": "", "source": source if action else "auto"}
+        if action == "skip":
+            r["kind"] = SKIP
+        elif action == "exclude":                 # skipped, and its name goes into RomM's
+            r.update(kind=SKIP, excluded=True)     # exclude rules in config.yml
+        elif action == "merge":
+            if up and up["kind"] in (PLATFORM, MERGE):
+                r.update(kind=MERGE, slug=up["slug"])
+        elif action.startswith("bios:"):
+            r.update(kind=BIOS, slug=action[5:])
+        elif action:
+            r.update(kind=PLATFORM, slug=action)
+        elif up and up["kind"] in (PLATFORM, MERGE):
+            name = name_of(path)
+            if BIOS_NAMES.search(name):
+                r.update(kind=BIOS, slug=up["slug"])
+            elif SKIP_NAMES.match(name) or not self.opt["variants"]:
                 r["kind"] = SKIP
-            elif action == "exclude":                 # skipped, and its name goes into RomM's
-                r.update(kind=SKIP, excluded=True)     # exclude rules in config.yml
-            elif action == "merge":
-                if up and up["kind"] in (PLATFORM, MERGE):
-                    r.update(kind=MERGE, slug=up["slug"])
-            elif action.startswith("bios:"):
-                r.update(kind=BIOS, slug=action[5:])
-            elif action:
-                r.update(kind=PLATFORM, slug=action)
-            elif up and up["kind"] in (PLATFORM, MERGE):
-                name = name_of(path)
-                if BIOS_NAMES.search(name):
-                    r.update(kind=BIOS, slug=up["slug"])
-                elif SKIP_NAMES.match(name) or not self.opt["variants"]:
-                    r["kind"] = SKIP
-                else:
-                    r.update(kind=MERGE, slug=up["slug"])
-            elif up and up["kind"] in (SKIP, BIOS):
-                r.update(kind=up["kind"], slug=up["slug"])
-            self.res[path] = r
+            else:
+                r.update(kind=MERGE, slug=up["slug"])
+        elif up and up["kind"] in (SKIP, BIOS):
+            r.update(kind=up["kind"], slug=up["slug"])
+        return r
+
+    @staticmethod
+    def choice(r: dict) -> str:
+        """How a folder's role is shown in its dropdown: a platform slug, "exclude", "firmware"
+        (BIOS folders, handled automatically) or "" (no platform yet)."""
+        if r["kind"] in (PLATFORM, MERGE):
+            return r["slug"]
+        if r["kind"] == SKIP:
+            return "exclude"
+        if r["kind"] == BIOS:
+            return "firmware"
+        return ""
 
     def excluded_names(self) -> list:
         """Folder names you marked "exclude": always written to RomM's exclude rules."""
@@ -349,6 +369,7 @@ class Mapping:
                 continue
             row = {"path": path, "files": files, "synced": have, "kind": r["kind"], "slug": r["slug"],
                    "excluded": bool(r.get("excluded")),
+                   "value": self.choice(r), "auto": self.choice(self.auto[path]),
                    "source": r["source"], "action": self.user.get(path, ""), "rule": RULES.get(path, ""),
                    "used": r["kind"] in (PLATFORM, MERGE, BIOS) and self._uses(path)}
             if r["kind"] in (PLATFORM, MERGE) and r["slug"] not in SLUGS:
@@ -383,9 +404,9 @@ class Mapping:
             if self.firmware:
                 w.append("Firmware isn't linked (RomM's bios folder is separate): copy these to RomM's bios "
                          "folder: " + ", ".join(f["mount"] for f in self.firmware))
-        if not self.romm_folder_host():
-            w.append("Set the RomM folder (the folder on your server RomM uses as its roms folder, e.g. "
-                     "/path/to/roms) so the paths below are right.")
+        if not self.links and not self.romm_folder_host():
+            w.append("Docker mounts point at your server's folders: replace /path/on/your/server in the "
+                     "RomM compose output with the folder that holds Rom Sync's downloads.")
         return w
 
     # ------------------------------------------------------------------ outputs
@@ -414,11 +435,23 @@ class Mapping:
             return {}
         return {p["slug"]: inside + ("/" + p["mount"] if p["mount"] else "") for p in self.platforms}
 
-    def romm_folder_host(self) -> str:
-        """RomM's roms folder on the server (the "RomM folder" setting). Older settings stored the
-        download folder instead; then it's that folder's parent (as many levels as it's nested)."""
+    def romm_folder(self) -> str:
+        """The "RomM folder" setting: where Rom Sync's downloads appear inside RomM's container
+        (default /romm/library/roms/lolroms). Values not under /romm are older server paths."""
         f = (self.opt.get("romm_folder") or "").strip().rstrip("/\\")
-        if f:
+        return f if f.startswith("/romm/") else DEFAULT_ROMM_FOLDER
+
+    def library(self) -> str:
+        """RomM's library folder inside its container, from the RomM folder (/romm/library)."""
+        f = self.romm_folder()
+        return f.split("/roms/")[0] if "/roms/" in f else "/romm/library"
+
+    def romm_folder_host(self) -> str:
+        """RomM's roms folder on the server, when known from older settings (a server path saved as
+        the RomM folder, or the download folder on the server); "" otherwise. Only the per-platform
+        Docker mounts need it - links work without it."""
+        f = (self.opt.get("romm_folder") or "").strip().rstrip("/\\")
+        if f and not f.startswith("/romm/"):
             return f
         old = (self.opt.get("host_path") or "").strip().rstrip("/\\")
         inside = self.data_in_links()
@@ -433,18 +466,18 @@ class Mapping:
         base = self.romm_folder_host()
         inside = self.data_in_links()
         if not base:
-            return "/path/to/romm/" + (inside or "downloads")
+            return "/path/on/your/server/" + (inside or "downloads")
         return base + ("/" + inside if inside else "")
 
     def _links_host(self) -> str:
         """The links folder as the Docker host sees it (RomM's roms folder)."""
-        return self.romm_folder_host() or "/path/to/romm"
+        return self.romm_folder_host() or "/path/on/your/server"
 
     def _source(self, path: str) -> str:
         return self.download_host() + ("/" + path if path else "")
 
     def _mounts(self):
-        lib = self.opt["library"].rstrip("/")
+        lib = self.library()
         for p in self.platforms:
             yield self._source(p["mount"]), f"{lib}/roms/{p['slug']}"
         for f in self.firmware:
@@ -453,9 +486,9 @@ class Mapping:
     def compose(self) -> str:
         if self.links:
             return ("    volumes:\n"
-                    "      # for the RomM service (not Rom Sync): replace its .../romm/library/roms line.\n"
-                    "      # Rom Sync keeps one folder link per platform in here.\n"
-                    f"      - {json.dumps(self._links_host() + ':' + self.opt['library'].rstrip('/') + '/roms', ensure_ascii=False)}\n")
+                    "      # for the RomM service (not Rom Sync): replace its .../romm/library/roms line with\n"
+                    f"      # the server folder that holds Rom Sync's \"{self.data_in_links() or 'downloads'}\" folder and its platform links.\n"
+                    f"      - {json.dumps(self._links_host() + ':' + self.library() + '/roms', ensure_ascii=False)}\n")
         lines = ["    volumes:",
                  "      # for the RomM service (not Rom Sync): Rom Sync's folders, read-only,",
                  "      # each shown to RomM under its platform name"]

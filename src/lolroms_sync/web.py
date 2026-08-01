@@ -170,7 +170,7 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
         opt = romm.options_from(s)
         m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])), opt, s["data_dir"])
         return {"options": {**{k: opt[k] for k in ("library", "only_synced", "variants", "layout",
-                                                 "method", "links_dir")}, "romm_folder": m.romm_folder_host(),
+                                                 "method", "links_dir")}, "romm_folder": m.romm_folder(),
                             "download_host": m.download_host()},
                 "links": {"dir": m.links_dir, "download_dir": m.data_dir, "inside": m.data_in_links(),
                           "targets": m.link_targets() if m.links else {}},
