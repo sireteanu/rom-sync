@@ -355,6 +355,7 @@ function renderStatus(st) {
   const pill = $("#jobpill");
   const syncing = st.sync && job && job.phase === "downloading" && busy;
   pill.className = "pill " + (busy ? "busy" : st.sync && st.sync.paused ? "warn" : "idle");
+  $("#mdot").hidden = !busy;
   pill.textContent = busy ? (job.kind === "scan" ? "Scanning" : "Syncing") :
     (st.sync && st.sync.paused ? "Paused" : "Idle");
   $("#btn-scan").disabled = busy;
@@ -650,47 +651,38 @@ const ROMM_HELP = {
 };
 /* a folder's choice as a dropdown. Filled with only the current choice at first (hundreds of rows x
    hundreds of platforms would be slow) and with every choice when it's opened. */
-function rommDefaultLabel(r) {
-  if (r.rule) return r.rule.startsWith("bios:") ? "firmware for " + r.rule.slice(5) : r.rule;
-  if (r.source === "auto" || !r.action) {
-    if (r.kind === "merge") return "merge into " + r.slug;
-    if (r.kind === "bios") return "firmware for " + r.slug;
-    if (r.kind === "skip") return "skip";
-  }
-  return "no platform";
-}
 function rommOptionLabel(v) {
-  if (v === "merge") return "merge - into the platform above";
-  if (v === "skip") return "skip - leave out";
-  if (v === "exclude") return "exclude - leave out + RomM exclude rule";
-  if (v.startsWith("bios:")) return "firmware for " + v.slice(5);
+  if (v === "exclude") return "exclude - leave out of RomM";
+  if (v === "firmware") return "firmware (automatic)";
+  if (v === "") return "- pick a platform -";
   const p = romm.slugs.find((x) => x.slug === v);
   return p ? `${v} - ${p.name}` : v;
 }
+/* the dropdown shows what the folder is: a RomM platform, "exclude", or firmware (BIOS folders,
+   handled automatically). Picking what it would be anyway clears your own choice for it, so
+   improvements to the built-in rules still reach it. */
 function fillRommChoice(sel, r, value, full) {
   sel.innerHTML = "";
   const add = (parent, v, label) => { const o = document.createElement("option"); o.value = v; o.textContent = label; parent.append(o); return o; };
-  add(sel, "", "Default: " + rommDefaultLabel(r));
   if (!full) {
-    if (value) add(sel, value, rommOptionLabel(value));
+    add(sel, value, rommOptionLabel(value));
   } else {
-    const g1 = document.createElement("optgroup"); g1.label = "Choices"; sel.append(g1);
-    for (const v of ["merge", "skip", "exclude"]) add(g1, v, rommOptionLabel(v));
-    const g2 = document.createElement("optgroup"); g2.label = "RomM platforms"; sel.append(g2);
-    for (const p of romm.slugs) add(g2, p.slug, `${p.slug} - ${p.name}`);
-    const g3 = document.createElement("optgroup"); g3.label = "Firmware for"; sel.append(g3);
-    for (const p of romm.slugs) add(g3, "bios:" + p.slug, `firmware for ${p.slug} - ${p.name}`);
+    if (value === "") add(sel, "", rommOptionLabel(""));
+    if (value === "firmware" || r.auto === "firmware") add(sel, "firmware", rommOptionLabel("firmware"));
+    add(sel, "exclude", rommOptionLabel("exclude"));
+    const g = document.createElement("optgroup"); g.label = "RomM platforms"; sel.append(g);
+    for (const p of romm.slugs) add(g, p.slug, `${p.slug} - ${p.name}`);
     if (value && ![...sel.options].some((o) => o.value === value)) add(sel, value, value);   // a custom platform
     sel.dataset.full = "1";
   }
-  sel.value = value || "";
+  sel.value = value;
 }
 
 function rommResult(r) {
   if (r.kind === "platform") return [r.used ? `roms/${r.slug}` : `roms/${r.slug} (nothing synced)`, r.custom ? "warn" : "ok"];
   if (r.kind === "merge") return [r.used ? `in ${r.slug}` : `in ${r.slug} (nothing synced)`, "ok"];
   if (r.kind === "bios") return [`firmware: bios/${r.slug}`, "ok"];
-  if (r.kind === "skip") return [r.excluded ? "excluded in RomM" : "skipped", "none"];
+  if (r.kind === "skip") return ["left out of RomM", "none"];
   return ["no platform", "bad"];
 }
 function renderRomm() {
@@ -709,14 +701,19 @@ function renderRomm() {
     tr.children[1].textContent = r.synced && r.synced !== r.files ? `${num(r.synced)} / ${num(r.files)}` : num(r.files);
     const sel = $(".act", tr);
     sel.dataset.path = r.path;
-    const value = r.path in rommPending ? rommPending[r.path].value : r.action;
+    const value = r.path in rommPending ? rommPending[r.path].shown : r.value;
     fillRommChoice(sel, r, value, false);                // just the current choice until it's opened
     const full = () => { if (!sel.dataset.full) fillRommChoice(sel, r, sel.value, true); };
     sel.addEventListener("pointerdown", full);
     sel.addEventListener("focus", full);
     sel.addEventListener("keydown", full);
     sel.setAttribute("aria-label", `RomM platform for ${r.path}`);
-    sel.addEventListener("change", () => rommQueue(r.path, sel.value, true));
+    sel.addEventListener("change", () => {
+      const v = sel.value;
+      // the same as it would be anyway (or firmware, which is automatic) = no choice of your own
+      rommQueue(r.path, v === r.auto || v === "firmware" ? "" : v, true);
+      rommPending[r.path].shown = v;
+    });
     const [text, cls] = rommResult(r);
     const res = tr.children[3];
     res.textContent = text;
@@ -779,9 +776,7 @@ $("#romm-list-find").addEventListener("input", renderRommList);
 function rommLoad(d) {
   romm = d;
   $("#romm-host").value = d.options.romm_folder || "";
-  $("#romm-host-hint").textContent = d.options.romm_folder
-    ? `RomM's roms folder on your server. Rom Sync's downloads are in ${d.options.download_host}.`
-    : "The folder on your server that RomM uses as its roms folder, e.g. /path/to/roms. Rom Sync's downloads are inside it.";
+  $("#romm-host-hint").textContent = "Where Rom Sync's downloads appear inside RomM's container (default /romm/library/roms/lolroms).";
   $("#romm-only").checked = !!d.options.only_synced;
   $("#romm-var").checked = !!d.options.variants;
   $("#romm-layout").value = d.options.layout || "category";
@@ -861,6 +856,18 @@ $("#romm-copy").addEventListener("click", async () => {
   $("#romm-copy").textContent = "Copied";
   setTimeout(() => ($("#romm-copy").textContent = "Copy"), 1500);
 });
+
+/* ---------------------------------------------------------------- phone tabs */
+function showPane(pane) {
+  $("#layout").dataset.pane = pane;
+  for (const b of document.querySelectorAll(".mtabs button")) {
+    b.classList.toggle("on", b.dataset.pane === pane);
+    b.setAttribute("aria-pressed", String(b.dataset.pane === pane));
+  }
+  try { localStorage.setItem("pane", pane); } catch (e) {}
+}
+for (const b of document.querySelectorAll(".mtabs button")) b.addEventListener("click", () => { showPane(b.dataset.pane); window.scrollTo(0, 0); });
+try { const p = localStorage.getItem("pane"); if (p === "activity" || p === "browser") showPane(p); } catch (e) {}
 
 /* ---------------------------------------------------------------- theme */
 $("#btn-theme").addEventListener("click", () => {

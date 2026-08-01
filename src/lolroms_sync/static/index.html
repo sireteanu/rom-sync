@@ -66,7 +66,7 @@
   </div>
 </section>
 
-<main class="layout">
+<main class="layout" id="layout" data-pane="browser">
   <section class="browser" aria-label="Folders">
     <div class="toolbar">
       <input id="search" type="search" placeholder="Find a folder, e.g. Game Boy" autocomplete="off" aria-label="Find a folder">
@@ -110,6 +110,14 @@
     </div>
   </aside>
 </main>
+
+<!-- phones / narrow windows: switch between the folder tree and the activity side -->
+<nav class="mtabs" aria-label="Sections">
+  <button data-pane="browser" class="on">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h7l2 2h9v12H3V5Zm2 4v8h14V9H5Z"/></svg>Folders</button>
+  <button data-pane="activity">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h4l3-8 4 14 3-6h4v2h-3l-4 8-4-14-2 6H3v-2Z"/></svg>Activity<span class="mdot" id="mdot" hidden></span></button>
+</nav>
 
 <dialog id="files-dlg" class="dlg wide">
   <form method="dialog" class="dlg-head"><h2 id="files-title">Files</h2><button class="btn icon" aria-label="Close">✕</button></form>
@@ -170,7 +178,7 @@
     </div>
     <p id="romm-applied" class="small muted" hidden></p>
   </div>
-  <label class="field"><span>RomM folder</span><input id="romm-host" placeholder="/path/to/roms">
+  <label class="field"><span>RomM folder</span><input id="romm-host" placeholder="/romm/library/roms/lolroms">
     <small id="romm-host-hint">The folder on your server that RomM uses as its roms folder. Rom Sync's downloads are inside it.</small></label>
   <label class="check"><input type="checkbox" id="romm-only"> Only folders with synced files (Docker would create missing ones empty)</label>
   <label class="check"><input type="checkbox" id="romm-var"> Include subfolders such as T-En, hacks and add-ons in their platform</label>
@@ -187,9 +195,9 @@
       </div>
       <div class="romm-wrap"><table class="files romm"><thead><tr><th>Folder</th><th>Files</th><th>RomM platform</th><th>Result</th></tr></thead>
         <tbody id="romm-body"></tbody></table></div>
-      <p class="muted small">Pick a RomM platform for a folder, or: <b>merge</b> (its games join the platform above),
-        a <b>firmware</b> entry, <b>skip</b> (leave it out), or <b>exclude</b> (leave it out and add its name to RomM's
-        exclude rules). <b>Default</b> goes back to the built-in choice. Every choice is saved right away.</p>
+      <p class="muted small">Pick the RomM platform for a folder, or <b>exclude</b> to leave it out of RomM. A subfolder
+        with the same platform as its parent (like T-En under snes) is part of that platform. Every choice is saved
+        right away.</p>
     </section>
     <section>
       <div class="romm-bar">
