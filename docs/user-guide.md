@@ -89,6 +89,9 @@ manager to see what's new; folders get the date of their newest file. Files get 
 
 ## 5. Watching progress
 
+On a phone, use the **Folders** / **Activity** tabs at the bottom of the screen to switch between the
+folder tree and the activity side (a dot on Activity means something is running).
+
 The right-hand side shows:
 
 - **Activity** - what's running. During a sync, the **This sync** box shows the total size of the
@@ -143,20 +146,19 @@ Rom Sync can show your synced folders to [RomM](https://github.com/rommapp/romm)
 platform names (`snes`, `psx`, …) without moving or copying anything. Click **RomM Mapper** in the
 header.
 
-**Step 1 - RomM folder.** Enter the folder on your server that RomM uses as its roms folder, for
-example `/path/to/roms`. Rom Sync's downloads are inside it (the hint underneath shows where, for
-example `/path/to/roms/lolroms`).
+**Step 1 - RomM folder.** Where Rom Sync's downloads appear inside RomM's container. The default,
+`/romm/library/roms/lolroms`, is right when RomM's roms folder is the folder that holds Rom Sync's
+`lolroms` folder.
 
 **Step 2 - check the platforms.** The table lists every folder that has files and what it becomes
 in RomM. Most are filled in already. To change one, pick from its dropdown:
 
-- a **RomM platform** (all of them are listed with their full names),
-- **merge** - put this folder's games into the platform above it (translations, hacks, add-ons),
-- **firmware for …** - this folder holds BIOS files for that platform,
-- **skip** - leave it out of RomM,
-- **exclude** - leave it out *and* add its name to RomM's exclude rules, so RomM ignores any folder
-  with that name,
-- **Default** - go back to the built-in choice.
+- a **RomM platform** (all of them are listed with their full names). A subfolder with the same
+  platform as its parent - like *T-En* under *Super Famicom* showing `snes` - is part of that
+  platform,
+- **exclude** - leave it out of RomM (its name is added to RomM's exclude rules).
+
+BIOS folders show *firmware (automatic)* - they're handled for you.
 
 Every choice is saved the moment you make it - closing the dialog, restarting or shutting down
 doesn't lose it. A backup copy is kept next to the catalog and restored automatically if the

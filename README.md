@@ -51,7 +51,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 | Schedule | Optional automatic sync every N hours and a full site scan every N days. |
 | Reliability | A sync cut off by a restart, crash or reboot continues by itself at the next start. Power menu: **Restart** / **Shut down**. Starting a second copy just opens the running one. |
 | RomM | **RomM Mapper** maps every folder to a RomM platform (built-in rules, editable per folder from a dropdown, including "exclude"). Generates RomM's `config.yml`, and either keeps one folder link per platform (one RomM mapping) or writes one Docker mount per platform. Choices are saved instantly and backed up next to the catalog. |
-| Interface | Dark (default) or light theme, works on a phone, optional password (HTTP Basic), no external resources (works on a LAN without internet for the page itself). |
+| Interface | Dark (default) or light theme, works on a phone (Folders / Activity tabs at the bottom), optional password (HTTP Basic), no external resources (works on a LAN without internet for the page itself). |
 
 ---
 
@@ -197,8 +197,11 @@ slug), **merge** (its games join the platform above), **bios:slug** (firmware), 
 **exclude** (skipped, and its folder name is always written to RomM's `exclude.roms.multi_file.names`),
 or **no platform**:
 
-1. Your own choice, picked from the folder's dropdown (Default, merge, skip, exclude, any RomM
-   platform, firmware for any platform). Saved immediately (`POST /api/romm/map`); stored in the
+1. Your own choice, picked from the folder's dropdown, which offers just **a RomM platform** or
+   **exclude** (BIOS folders show "firmware (automatic)"; a subfolder showing its parent's platform is
+   merged into it). Picking what the folder would be anyway stores no choice of its own (the API's
+   rows carry `value` and `auto` for this). The API still accepts `merge`, `skip` and `bios:<slug>`.
+   Saved immediately (`POST /api/romm/map`); stored in the
    catalog's `romm` setting and mirrored to `<config>/romm-mapper.json`, which is restored
    automatically if the catalog ever loses them (reset or replaced).
 2. Built-in rules for lolroms' tree (`RULES` in `romm.py`), e.g. `Nintendo/Super Famicom` → `snes`,
@@ -266,10 +269,10 @@ system:
   `{platform}` (or the platform's own key) as the platform folder, and all platform folders must sit
   directly in one folder - so `"snes": "roms/Super Famicom/{game}"` is refused. The links (or mounts)
   provide those folders.
-- Options: **RomM folder** - RomM's roms folder on the server (e.g. `/path/to/roms`); Rom Sync's
-  download folder on the server is derived from it (e.g. `/path/to/roms/lolroms`, from where the
-  download folder sits inside the links folder). RomM's library inside its container is
-  `/romm/library`. Only folders with synced files (default on).
+- Options: **RomM folder** - where Rom Sync's downloads appear inside RomM's container (default
+  `/romm/library/roms/lolroms`; RomM's library path is derived from it). A server path saved by
+  older versions is still used for the per-platform Docker mounts' sources; otherwise those show
+  `/path/on/your/server`. Only folders with synced files (default on).
 - Command line: `python -m lolroms_sync.romm --config config [compose|config]`.
 
 ---

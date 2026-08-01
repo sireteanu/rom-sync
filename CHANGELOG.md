@@ -5,6 +5,21 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-08-01
+
+### Improved
+- **RomM Mapper dropdowns are simpler**: each folder shows its RomM platform or **exclude**, and that's
+  all you choose from. "Default", "merge", "skip" and the firmware list are gone: a subfolder simply
+  shows its parent's platform (for example T-En under Super Famicom shows `snes`), BIOS folders are
+  handled automatically, and picking what a folder would be anyway leaves it on the built-in choice.
+- **RomM folder** now means where Rom Sync's downloads appear inside RomM, and defaults to
+  `/romm/library/roms/lolroms`.
+
+### Fixed
+- **Phones**: the Activity, Log and Downloading panels couldn't be reached under the folder tree.
+  Small screens now have **Folders** / **Activity** tabs at the bottom (with a dot while something
+  is running).
+
 ## [1.2.9] - 2026-07-30
 
 ### New
