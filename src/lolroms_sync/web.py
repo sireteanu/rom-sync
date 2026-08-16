@@ -164,16 +164,32 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
     async def history():
         return {"history": eng().catalog.history(20)}
 
+    # ---------------------------------------------------------------- clean up
+    @app.get("/api/cleanup")
+    async def cleanup_list():
+        e = eng()
+        files = await e.find_leftovers()
+        return {"files": files, "summary": e.leftovers, "busy": e.busy}
+
+    @app.post("/api/cleanup/delete")
+    async def cleanup_delete(paths: list = Body(..., embed=True), confirm: bool = Body(False, embed=True)):
+        e = eng()
+        if not confirm:
+            raise HTTPException(400, "confirm the delete first")
+        if e.busy:
+            raise HTTPException(409, "wait until the scan or sync has finished, then try again")
+        res = await e.delete_leftovers([str(p) for p in paths])
+        return dict(res, summary=e.leftovers)
+
     # ---------------------------------------------------------------- RomM mapping
     def romm_view(e: Engine) -> dict:
         s = e.catalog.settings()
         opt = romm.options_from(s)
         m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])), opt, s["data_dir"])
-        return {"options": {**{k: opt[k] for k in ("library", "only_synced", "variants", "layout",
-                                                 "method", "links_dir")}, "romm_folder": m.romm_folder(),
-                            "download_host": m.download_host()},
+        return {"options": {**{k: opt[k] for k in ("only_synced", "variants", "layout", "links_dir",
+                                                 "keep_links")}, "romm_folder": m.romm_folder()},
                 "links": {"dir": m.links_dir, "download_dir": m.data_dir, "inside": m.data_in_links(),
-                          "targets": m.link_targets() if m.links else {}},
+                          "targets": m.link_targets()},
                 "rows": m.rows(), "platforms": m.platforms, "firmware": m.firmware,
                 "warnings": m.warnings(), "summary": m.summary(), "slugs": [{"slug": k, "name": v[0], "family": v[1], "kind": v[2]}
                           for k, v in sorted(romm.PLATFORMS.items())],
@@ -193,22 +209,18 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
     async def romm_options(values: dict = Body(...)):
         e = eng()
         cur = dict(e.catalog.settings().get("romm") or {})
-        for k in ("romm_folder", "library"):
+        for k in ("romm_folder", "links_dir"):
             if k in values:
                 cur[k] = str(values[k] or "").strip()
-        if "romm_folder" in values:
-            cur.pop("host_path", None)                 # replaced by the RomM folder
-        for k in ("only_synced", "variants"):
+        for k in ("only_synced", "variants", "keep_links"):
             if k in values:
                 cur[k] = bool(values[k])
         if values.get("layout") in ("category", "folders"):
             cur["layout"] = values["layout"]
-        if values.get("method") in ("mounts", "links"):
-            cur["method"] = values["method"]
-        if "links_dir" in values:
-            cur["links_dir"] = str(values["links_dir"] or "").strip()
-        if not cur.get("library"):
-            cur.pop("library", None)
+        for old in ("host_path", "library", "method"):     # settings from before 1.3.0
+            if old == "method" and cur.get(old) == "links":
+                cur.setdefault("keep_links", True)
+            cur.pop(old, None)
         save_romm(e, cur)
         return romm_view(e)
 
@@ -237,6 +249,11 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
                          romm.options_from(s), s["data_dir"])
         res = await asyncio.to_thread(romm.apply_links, m)
         log.info(romm.describe_links(res))
+        if m.data_in_links() is not None:                 # from now on, kept up to date after each sync
+            cur = dict(s.get("romm") or {})
+            if not cur.get("keep_links"):
+                cur["keep_links"] = True
+                save_romm(e, cur)
         view = romm_view(e)
         view["applied"] = dict(res, text=romm.describe_links(res))
         return view

@@ -14,12 +14,12 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 
-from dir_crawler.config import Config
-from dir_crawler.constants import MAX_BODY, RETRY_STATUSES, THROTTLE_STATUSES
-from dir_crawler.extract import LinkExtractor
-from dir_crawler.limits import Limiter, _retry_after
-from dir_crawler.urls import UrlRules
-from dir_crawler.util import FetchError
+from .core.config import Config
+from .core.constants import MAX_BODY, RETRY_STATUSES, THROTTLE_STATUSES
+from .core.extract import LinkExtractor
+from .core.limits import Limiter, _retry_after
+from .core.urls import UrlRules
+from .core.util import FetchError
 
 from .catalog import Catalog
 

@@ -1,4 +1,4 @@
-"""RomM mapping: lolroms folders -> RomM mounts + config.yml, without moving anything."""
+"""RomM Mapper: lolroms folders -> platform links + config.yml, without moving anything."""
 import pytest
 
 from lolroms_sync.romm import Mapping, check_action
@@ -17,26 +17,23 @@ FOLDERS = {
 
 
 def m(**opt):
-    return Mapping(FOLDERS, dict({"host_path": "/path/to/roms", "layout": "folders"}, **opt))
+    return Mapping(FOLDERS, dict({"layout": "folders"}, **opt))
 
 
 def cat(folders=None, **opt):
-    return Mapping(folders or FOLDERS, dict({"host_path": "/path/to/roms"}, **opt))   # default layout
+    return Mapping(folders or FOLDERS, dict(opt))   # default layout
 
 
 def plat(mp, slug):
     return next(p for p in mp.platforms if p["slug"] == slug)
 
 
-def test_nested_platforms_get_their_own_mount():
+def test_nested_platforms_get_their_own_link():
     mp = m()
     snes, sat = plat(mp, "snes"), plat(mp, "satellaview")
     assert snes["mount"] == "Nintendo/Super Famicom" and sat["mount"] == "Nintendo/Super Famicom/Satellaview"
     assert snes["templates"] == ["roms/{platform}/{game}", "roms/{platform}/T-En/{game}"]   # MSU-1 not synced
     assert "Satellaview" in snes["exclude"] and "MSU-1" in snes["exclude"]
-    out = mp.compose()
-    assert '"/path/to/roms/Nintendo/Super Famicom"' in out and '"/romm/library/roms/snes"' in out
-    assert "read_only: true" in out
 
 
 def test_firmware_and_skipped_subfolders():
@@ -44,10 +41,10 @@ def test_firmware_and_skipped_subfolders():
     assert plat(mp, "ngc")["templates"] == ["roms/{platform}/{game}"]
     assert set(plat(mp, "ngc")["exclude"]) == {"BIOS", "Saves"}
     assert [f["mount"] for f in mp.firmware] == ["Nintendo/GameCube/BIOS"]
-    assert "/romm/library/bios/ngc" in mp.compose()
+    assert any("Nintendo/GameCube/BIOS" in w for w in mp.warnings())       # copied to RomM's bios by hand
 
 
-def test_siblings_with_one_platform_share_a_mount():
+def test_siblings_with_one_platform_share_a_link():
     apf = plat(m(), "apf")
     assert apf["mount"] == "APF"
     assert apf["templates"] == ["roms/{platform}/Imagination Machine/{game}", "roms/{platform}/MP-1000/{game}"]
@@ -61,7 +58,6 @@ def test_config_yml_sections():
     assert '"snes":' in y and '- "roms/{platform}/T-En/{game}"' in y
     assert '"ngc":' not in y                                     # default layout needs no override
     assert 'versions:' in y and '"naomi": "arcade"' in y
-    assert '"arcade"' in y or "roms/arcade" in m().compose()
     assert not any(p["slug"] == "fbneo" for p in m().platforms)
 
 
@@ -132,7 +128,7 @@ def test_links_mode_makes_relative_platform_links(tmp_path):
     (lib / "gb").mkdir()                                       # a real folder RomM already has
     os.symlink("elsewhere/x", lib / "psx")                     # someone else's link
     os.symlink("lolroms/Old/Gone", lib / "oldslug")            # a stale link of ours
-    mp = Mapping(FOLDERS, {"host_path": "/path/to/roms/lolroms", "method": "links"}, str(data))
+    mp = Mapping(FOLDERS, {}, str(data))
     assert mp.data_in_links() == "lolroms"
     t = mp.link_targets()
     assert t["snes"] == "lolroms/Nintendo/Super Famicom" and t["apf"] == "lolroms/APF"
@@ -144,11 +140,11 @@ def test_links_mode_makes_relative_platform_links(tmp_path):
     assert apply_links(mp)["kept"] == len(t)                                       # idempotent
     y = mp.config_yml()
     assert 'platforms:\n    - "lolroms"' in y and '"Satellaview"' in y
-    assert '"/path/to/roms:/romm/library/roms"' in mp.compose()
+    assert '"/path/on/your/server:/romm/library/roms"' in mp.compose()
 
 
 def test_links_mode_needs_the_downloads_inside_the_links_folder(tmp_path):
-    mp = Mapping(FOLDERS, {"method": "links", "links_dir": str(tmp_path / "other")}, str(tmp_path / "dl"))
+    mp = Mapping(FOLDERS, {"links_dir": str(tmp_path / "other")}, str(tmp_path / "dl"))
     assert mp.data_in_links() is None and mp.link_targets() == {}
     assert any("inside the links folder" in w for w in mp.warnings())
 
@@ -165,13 +161,11 @@ def test_exclude_choice_goes_into_romms_exclude_rules():
     assert check_action("Exclude") == "exclude"
 
 
-def test_one_romm_folder_setting_and_old_settings_still_work(tmp_path):
-    data = str(tmp_path / "romm" / "lolroms")
-    new = Mapping(FOLDERS, {"romm_folder": "/path/to/roms/"}, data)
-    assert new.romm_folder_host() == "/path/to/roms" and new.download_host() == "/path/to/roms/lolroms"
-    old = Mapping(FOLDERS, {"host_path": "/path/to/roms/lolroms"}, data)     # saved before 1.2.9
-    assert old.romm_folder_host() == "/path/to/roms" and old.download_host() == "/path/to/roms/lolroms"
-    assert '"/path/to/roms/lolroms/Nintendo/Super Famicom"' in old.compose()
+def test_settings_from_before_links_only_are_understood():
+    from lolroms_sync.romm import options_from
+    old = options_from({"romm": {"method": "links", "host_path": "/path/to/roms", "library": "/romm/library"}})
+    assert old["keep_links"] is True and "method" not in old and "host_path" not in old
+    assert options_from({"romm": {"method": "mounts"}})["keep_links"] is False
 
 
 def test_dropdown_values_are_a_platform_or_exclude():
@@ -188,8 +182,8 @@ def test_dropdown_values_are_a_platform_or_exclude():
 
 
 def test_romm_folder_defaults_to_romms_view_of_the_downloads(tmp_path):
-    mp = Mapping(FOLDERS, {"method": "links"}, str(tmp_path / "romm" / "lolroms"))
+    mp = Mapping(FOLDERS, {}, str(tmp_path / "romm" / "lolroms"))
     assert mp.romm_folder() == "/romm/library/roms/lolroms" and mp.library() == "/romm/library"
     assert '/path/on/your/server:/romm/library/roms"' in mp.compose()
     mp = Mapping(FOLDERS, {"romm_folder": "/romm/data/roms/lolroms"}, str(tmp_path / "romm" / "lolroms"))
-    assert mp.library() == "/romm/data" and any(t.startswith("/romm/data/roms/") for _, t in mp._mounts())
+    assert mp.library() == "/romm/data" and ':/romm/data/roms"' in mp.compose()

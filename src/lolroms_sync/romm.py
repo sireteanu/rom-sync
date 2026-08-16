@@ -2,17 +2,18 @@
 
 RomM wants one folder per platform, named by its slug, under <library>/roms/. lolroms nests
 platforms (Nintendo/Super Famicom/Satellaview) and keeps variants in subfolders (T-En, MSU-1).
-Instead of moving anything, we generate:
+Instead of moving anything, we keep:
 
-* Docker bind mounts that show each lolroms folder to RomM under its slug
-  (Nintendo/Super Famicom -> /romm/library/roms/snes, read-only), and
+* platform links: relative symlinks named by slug in the links folder (RomM's roms folder, by
+  default the download folder's parent), e.g. snes -> lolroms/Nintendo/Super Famicom, kept up to
+  date after every sync, so RomM needs a single folder mapping; and
 * a config.yml with `filesystem.structure` templates that pull variant subfolders into the
   platform (roms/{platform}/T-En/{game}), `exclude.roms.multi_file.names` so subfolders that are
   their own platform (Satellaview) or skipped (Flux dumps) aren't read as games, and
   `system.versions` for platforms RomM has no slug for (Naomi -> arcade).
 
-When several folders map to one slug (APF/Imagination Machine + APF/MP-1000 -> apf), their
-nearest common folder is mounted and each one gets its own template.
+When several folders map to one slug (APF/Imagination Machine + APF/MP-1000 -> apf), the link
+points at their nearest common folder (the "mount") and each one gets its own template.
 
 Per folder an action decides what happens: a RomM slug, "merge" (into the platform above),
 "bios:<slug>" (firmware), "skip", or nothing (the built-in rule, else inherited).
@@ -26,26 +27,22 @@ from __future__ import annotations
 import difflib
 import json
 import os
-import posixpath
 import re
 from typing import Optional
 
-from .romm_slugs import PLATFORMS, SLUGS  # noqa: F401 (PLATFORMS is used by web.py)
+from .romm_slugs import PLATFORMS, SLUGS
+
+__all__ = ["PLATFORMS", "SLUGS", "Mapping"]   # PLATFORMS is used by web.py
 
 DEFAULT_ROMM_FOLDER = "/romm/library/roms/lolroms"
 
 DEFAULT_OPTIONS = {
     "romm_folder": "",            # where Rom Sync's downloads are inside RomM's container
-                                  # ("" = /romm/library/roms/lolroms); older versions saved
-                                  # RomM's roms folder on the server here (still understood)
-                                  # download folder is inside it (e.g. .../roms/lolroms)
-    "host_path": "",              # older setting: the download folder on the server (still read)
-    "library": "/romm/library",  # RomM's library folder inside its container
-    "only_synced": True,          # only folders that have files on disk (a mount of a missing folder
-                                  # makes Docker create an empty one)
+                                  # ("" = /romm/library/roms/lolroms)
+    "only_synced": True,          # only folders that have files on disk
     "variants": True,             # pull unmapped subfolders (T-En, hacks ...) into their platform
-    "method": "mounts",           # how RomM sees the folders: "mounts" = a Docker mount per platform,
-                                  # "links" = platform folder links next to the download folder
+    "keep_links": False,          # update the platform links after every sync (turned on the first
+                                  # time you create the links)
     "links_dir": "",              # where the links go (path inside Rom Sync); "" = the download
                                   # folder's parent, e.g. /romm when downloads are /romm/lolroms
     "layout": "category",         # config.yml subfolder levels: "category" = {category} wildcards
@@ -391,30 +388,21 @@ class Mapping:
         dated = [f for p in self.platforms + self.firmware for f in p["folders"] if DATED.search(f)]
         if dated:
             w.append("These folder names include a date and change when the site updates them, so copy "
-                     "the mounts again after a scan: " + ", ".join(dated))
+                     "config.yml again after a scan: " + ", ".join(dated))
         for f in self.firmware:
             if f["ignored"]:
                 w.append(f"Firmware for {f['slug']} comes from {f['mount']}; also found in "
                          + ", ".join(f["ignored"]) + " (left out - RomM reads one firmware folder per platform).")
-        if self.links:
-            if self.data_in_links() is None:
-                w.append("Platform links need the download folder inside the links folder (for example "
-                         "downloads in /romm/lolroms and links in /romm) - change the links folder or "
-                         "the download folder.")
-            if self.firmware:
-                w.append("Firmware isn't linked (RomM's bios folder is separate): copy these to RomM's bios "
-                         "folder: " + ", ".join(f["mount"] for f in self.firmware))
-        if not self.links and not self.romm_folder_host():
-            w.append("Docker mounts point at your server's folders: replace /path/on/your/server in the "
-                     "RomM compose output with the folder that holds Rom Sync's downloads.")
+        if self.data_in_links() is None:
+            w.append("Platform links need the download folder inside the links folder (for example "
+                     "downloads in /romm/lolroms and links in /romm) - change the links folder or "
+                     "the download folder.")
+        if self.firmware:
+            w.append("Firmware isn't linked (RomM's bios folder is separate): copy these to RomM's bios "
+                     "folder: " + ", ".join(f["mount"] for f in self.firmware))
         return w
 
-    # ------------------------------------------------------------------ outputs
-    # ------------------------------------------------------------------ links mode
-    @property
-    def links(self) -> bool:
-        return self.opt.get("method") == "links"
-
+    # ------------------------------------------------------------------ platform links
     @property
     def links_dir(self) -> str:
         d = self.opt.get("links_dir") or (os.path.dirname(self.data_dir) if self.data_dir else "")
@@ -446,64 +434,20 @@ class Mapping:
         f = self.romm_folder()
         return f.split("/roms/")[0] if "/roms/" in f else "/romm/library"
 
-    def romm_folder_host(self) -> str:
-        """RomM's roms folder on the server, when known from older settings (a server path saved as
-        the RomM folder, or the download folder on the server); "" otherwise. Only the per-platform
-        Docker mounts need it - links work without it."""
-        f = (self.opt.get("romm_folder") or "").strip().rstrip("/\\")
-        if f and not f.startswith("/romm/"):
-            return f
-        old = (self.opt.get("host_path") or "").strip().rstrip("/\\")
-        inside = self.data_in_links()
-        if not old or not inside:
-            return old
-        if old.endswith("/" + inside):
-            return old[: -len(inside) - 1]
-        return posixpath.normpath(old + "/" + "/".join([".."] * (inside.count("/") + 1)))
-
-    def download_host(self) -> str:
-        """Rom Sync's download folder on the server: the RomM folder + the download folder's place in it."""
-        base = self.romm_folder_host()
-        inside = self.data_in_links()
-        if not base:
-            return "/path/on/your/server/" + (inside or "downloads")
-        return base + ("/" + inside if inside else "")
-
-    def _links_host(self) -> str:
-        """The links folder as the Docker host sees it (RomM's roms folder)."""
-        return self.romm_folder_host() or "/path/on/your/server"
-
-    def _source(self, path: str) -> str:
-        return self.download_host() + ("/" + path if path else "")
-
-    def _mounts(self):
-        lib = self.library()
-        for p in self.platforms:
-            yield self._source(p["mount"]), f"{lib}/roms/{p['slug']}"
-        for f in self.firmware:
-            yield self._source(f["mount"]), f"{lib}/bios/{f['slug']}"
-
     def compose(self) -> str:
-        if self.links:
-            return ("    volumes:\n"
-                    "      # for the RomM service (not Rom Sync): replace its .../romm/library/roms line with\n"
-                    f"      # the server folder that holds Rom Sync's \"{self.data_in_links() or 'downloads'}\" folder and its platform links.\n"
-                    f"      - {json.dumps(self._links_host() + ':' + self.library() + '/roms', ensure_ascii=False)}\n")
-        lines = ["    volumes:",
-                 "      # for the RomM service (not Rom Sync): Rom Sync's folders, read-only,",
-                 "      # each shown to RomM under its platform name"]
-        for src, dst in self._mounts():
-            lines += ["      - type: bind", f"        source: {json.dumps(src, ensure_ascii=False)}",
-                      f"        target: {json.dumps(dst)}", "        read_only: true"]
-        return "\n".join(lines) + "\n"
+        """The one volume line RomM's compose file needs: the links folder as its roms folder."""
+        return ("    volumes:\n"
+                "      # for the RomM service (not Rom Sync): replace its .../romm/library/roms line with\n"
+                f"      # the server folder that holds Rom Sync's \"{self.data_in_links() or 'downloads'}\" folder and its platform links.\n"
+                f"      - {json.dumps('/path/on/your/server:' + self.library() + '/roms', ensure_ascii=False)}\n")
 
     def config_yml(self) -> str:
         q = lambda s: json.dumps(s, ensure_ascii=False)  # noqa: E731 - JSON strings are valid YAML
         lines = ["# RomM config.yml - generated by Rom Sync. Merge these sections into your config.yml",
-                 "# (keep your other settings). Library: Rom Sync's folders mounted at roms/<platform>.", ""]
+                 "# (keep your other settings). Platforms: Rom Sync's links in roms/<platform>.", ""]
         names = sorted({n for p in self.platforms for n in p["exclude"]} | set(self.excluded_names()),
                        key=str.casefold)
-        inside = self.data_in_links() if self.links else None
+        inside = self.data_in_links()
         if inside:
             lines += ["exclude:", "  # the download folder itself is not a platform (its platforms are linked)",
                       "  platforms:", f"    - {q(inside.split('/')[0])}"]
@@ -625,7 +569,12 @@ def folders_from_catalog(catalog, types=None) -> dict:
 
 
 def options_from(settings: dict) -> dict:
-    return dict(DEFAULT_OPTIONS, **(settings.get("romm") or {}))
+    saved = dict(settings.get("romm") or {})
+    if saved.pop("method", None) == "links":          # before 1.3.0: links were one of two methods
+        saved.setdefault("keep_links", True)
+    saved.pop("host_path", None)                       # before 1.2.9 (Docker mounts only)
+    saved.pop("library", None)                         # now derived from the RomM folder
+    return dict(DEFAULT_OPTIONS, **saved)
 
 
 def main(argv=None) -> int:
@@ -635,17 +584,14 @@ def main(argv=None) -> int:
     from .catalog import Catalog
     from .engine import parse_types
     ap = argparse.ArgumentParser(prog="python -m lolroms_sync.romm",
-                                 description="Print RomM mounts / config.yml for the folders Rom Sync keeps.")
+                                 description="Print the RomM compose line / config.yml for the folders Rom Sync keeps.")
     ap.add_argument("what", nargs="?", choices=("compose", "config", "all"), default="all")
     ap.add_argument("--config", default=os.environ.get("LOLROMS_CONFIG") or "config",
                     help="Rom Sync's config folder (holds catalog.db)")
-    ap.add_argument("--host-path", help="RomM's roms folder on the Docker host, e.g. /path/to/roms (overrides the saved one)")
     a = ap.parse_args(argv)
     cat = Catalog(os.path.join(a.config, "catalog.db"))
     s = cat.settings()
     opt = options_from(s)
-    if a.host_path:
-        opt["romm_folder"] = a.host_path
     m = Mapping(folders_from_catalog(cat, parse_types(s["types"])), opt, s["data_dir"])
     parts = {"compose": m.compose, "config": m.config_yml}
     for k in (parts if a.what == "all" else [a.what]):
