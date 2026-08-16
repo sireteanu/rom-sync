@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import logging
 import os
 import time
@@ -12,12 +13,12 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 
-from dir_crawler.config import Config
-from dir_crawler.constants import ARCHIVE_EXTENSIONS, DOWNLOAD_EXTENSIONS
-from dir_crawler.download import Downloader, run_item
-from dir_crawler.limits import DownloadGate, RateLimit
-from dir_crawler.sync import FileInfo, Manifest, size_range, stamp_folders
-from dir_crawler.util import fmt_bytes, parse_size
+from .core.config import Config
+from .core.constants import ARCHIVE_EXTENSIONS, DOWNLOAD_EXTENSIONS
+from .core.download import Downloader, run_item
+from .core.limits import DownloadGate, RateLimit
+from .core.sync import FileInfo, Manifest, size_range, stamp_folders
+from .core.util import fmt_bytes, parse_size
 
 from . import __version__
 from .catalog import Catalog
@@ -100,6 +101,7 @@ class Engine:
         self.scheduler: Optional[asyncio.Task] = None
         self.next_run: Optional[float] = None
         self.shutting_down = False
+        self.leftovers: Optional[dict] = None   # Clean up summary from the last check
 
     def _restore_romm_backup(self) -> None:
         """RomM Mapper choices live in the catalog and in <config>/romm-mapper.json. If the catalog
@@ -179,11 +181,7 @@ class Engine:
         log.info("Stopping...")
 
     def _client(self) -> httpx.AsyncClient:
-        try:
-            import h2  # noqa: F401
-            http2 = True
-        except ImportError:
-            http2 = False
+        http2 = importlib.util.find_spec("h2") is not None
         n = self.scan_workers + int(self.catalog.settings().get("parallel_max") or 16) + 2
         return httpx.AsyncClient(http2=http2, follow_redirects=True, max_redirects=8,
                                  timeout=httpx.Timeout(15.0, connect=10.0),
@@ -369,6 +367,8 @@ class Engine:
                 if n:
                     log.info("Dated %d folders to their newest file", n)
             await self._update_romm_links()
+            if not self.stop_requested and not dl.paused:
+                await self._check_leftovers()
             best = self.gate.remembered_max()
             if best:
                 manifest.set_meta(key, best)
@@ -386,6 +386,40 @@ class Engine:
                  f" - paused: {dl.paused}" if dl.paused else "")
         return summary
 
+    # ------------------------------------------------------------------ clean up
+    async def find_leftovers(self) -> list:
+        """Files in the download folder that aren't part of the sync (see cleanup.py)."""
+        from . import cleanup
+        s = self.catalog.settings()
+        disk = await asyncio.to_thread(cleanup.walk, s["data_dir"])
+        self.catalog.commit()
+        files = cleanup.find(self.catalog, parse_types(s["types"]), disk)
+        self.leftovers = dict(cleanup.summary(files), checked=time.time())
+        return files
+
+    async def _check_leftovers(self) -> None:
+        try:
+            files = await self.find_leftovers()
+        except Exception as e:  # never let the check fail a sync
+            log.warning("Could not check the download folder for leftover files: %s", e)
+            return
+        if files:
+            log.info("%d files (%s) in the download folder aren't part of the sync any more - "
+                     "review them with Clean up", len(files), fmt_bytes(self.leftovers["bytes"]))
+
+    async def delete_leftovers(self, paths) -> dict:
+        """Delete the given files, but only those that are still leftovers right now."""
+        from . import cleanup
+        wanted = set(paths)
+        files = [f for f in await self.find_leftovers() if f["path"] in wanted]
+        res = await asyncio.to_thread(cleanup.delete, self.data_dir, files)
+        res["skipped"] = len(wanted) - len(files)
+        gone = set(res["deleted"])
+        self.catalog.forget_local([f["url"] for f in files if f.get("url") and f["path"] in gone])
+        log.info(cleanup.describe(res))
+        await self.find_leftovers()
+        return res
+
     # ------------------------------------------------------------------ schedule
     def _schedule_next(self) -> None:
         s = self.catalog.settings()
@@ -398,11 +432,11 @@ class Engine:
         self.next_run = max(base + hours * 3600, time.time() + 60)
 
     async def _update_romm_links(self) -> None:
-        """RomM links mode: keep the platform folder links in step with what's synced."""
+        """RomM Mapper: keep the platform folder links in step with what's synced (once set up)."""
         from . import romm
         s = self.catalog.settings()
         opt = romm.options_from(s)
-        if opt.get("method") != "links":
+        if not opt.get("keep_links"):
             return
         try:
             m = romm.Mapping(romm.folders_from_catalog(self.catalog, parse_types(s["types"])), opt, s["data_dir"])
@@ -437,11 +471,13 @@ class Engine:
                 self.start("scan+sync" if need_full else "sync", scheduled=True)
 
     # ------------------------------------------------------------------ status for the UI
-    def status(self, log_since: int = 0) -> dict:
-        s = self.catalog.settings()
-        types = parse_types(s["types"])
-        tree = self.catalog.tree(types)
-        rules = self.catalog.rules()
+    def _selection_totals(self, tree: dict, rules: dict) -> dict:
+        """Size of the ticked part of the catalog; worked out again only when the tree (rebuilt
+        after scans and downloads) or the ticks change, not on every status poll."""
+        key = (id(tree), tuple(sorted(rules.items())))
+        cached = getattr(self, "_sel_cache", None)
+        if cached and cached[0] == key and cached[2] is tree:
+            return dict(cached[1])
         sel = {"dirs": 0, "files": 0, "bytes": 0, "synced": 0, "synced_bytes": 0}
         for path, node in tree.items():
             if self.catalog.effective_files(path, rules):
@@ -450,6 +486,15 @@ class Engine:
                 sel["bytes"] += node.own_bytes
                 sel["synced"] += node.own_synced
                 sel["synced_bytes"] += node.own_synced_bytes
+        self._sel_cache = (key, dict(sel), tree)
+        return sel
+
+    def status(self, log_since: int = 0) -> dict:
+        s = self.catalog.settings()
+        types = parse_types(s["types"])
+        tree = self.catalog.tree(types)
+        rules = self.catalog.rules()
+        sel = self._selection_totals(tree, rules)
         root = tree.get("")
         full = self.catalog.last_scan("full")
         out = {
@@ -460,6 +505,7 @@ class Engine:
                         "bytes": root.bytes if root else 0, "last_full_scan": full},
             "selection": sel,
             "next_run": self.next_run,
+            "leftovers": self.leftovers,
             "data_dir": s["data_dir"],
             "log": self.logbuf.since(log_since),
         }

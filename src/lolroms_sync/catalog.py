@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Iterable, Optional
 
-from dir_crawler.sync import size_range
+from .core.sync import size_range
 
 SYNCED_WORDS = ("new", "updated", "resumed", "up to date", "already in folder")
 
@@ -238,6 +238,27 @@ class Catalog:
             self.db.execute("UPDATE files SET local=?, local_size=COALESCE(?, local_size), synced=?, "
                             "error=? WHERE url=?", (word, size, time.time(), error, url))
         self.dirty = True
+
+    def files_by_rel(self, dirs: Iterable[str]) -> dict:
+        """{saved path: (url, dir, ext)} for the files listed in the given folders."""
+        out = {}
+        dirs = list(dirs)
+        with self.lock:
+            for i in range(0, len(dirs), 500):
+                chunk = dirs[i:i + 500]
+                q = "SELECT rel, url, dir, ext FROM files WHERE dir IN (%s)" % ",".join("?" * len(chunk))
+                for rel, url, d, ext in self.db.execute(q, chunk):
+                    out[rel] = (url, d, ext)
+        return out
+
+    def forget_local(self, urls: Iterable[str]) -> None:
+        """These files were deleted from the download folder."""
+        with self.lock:
+            self.db.executemany("UPDATE files SET local=NULL, local_size=NULL, error=NULL WHERE url=?",
+                                [(u,) for u in urls])
+            self.db.commit()
+        self.dirty = True
+        self.invalidate()
 
     # ------------------------------------------------------------------ selection
     def rules(self) -> dict:
