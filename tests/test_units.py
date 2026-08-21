@@ -1,10 +1,10 @@
 """Unit tests: helpers, URL rules, link extraction."""
 import pytest
 
-from dir_crawler.config import Config
-from dir_crawler.extract import LinkExtractor
-from dir_crawler.urls import UrlRules
-from dir_crawler.util import extension, fmt_bytes, parse_size, safe_segment
+from lolroms_sync.core.config import Config
+from lolroms_sync.core.extract import LinkExtractor
+from lolroms_sync.core.urls import UrlRules
+from lolroms_sync.core.util import extension, fmt_bytes, parse_size, safe_segment
 
 START = "https://lolroms.com/?dir=Atari"
 

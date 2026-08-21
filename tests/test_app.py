@@ -3,73 +3,11 @@ import base64
 import os
 import time
 
-import pytest
 from fastapi.testclient import TestClient
 
+from conftest import kids, on_disk, scan, select, sync, tree, wait
 from lolroms_sync.engine import Engine
 from lolroms_sync.web import create_app
-
-TUNING = {"ramp": 0.2, "confirm": 0.5, "probe": 300}
-
-
-@pytest.fixture
-def app_factory(tmp_path):
-    clients = []
-
-    def make(site, password=None, data_locked=False):
-        cfg, data = tmp_path / "config", tmp_path / "data"
-        app = create_app(lambda: Engine(str(cfg), str(data), site.url + "/", data_locked=data_locked,
-                                        scan_delay=0, tuning=TUNING), password=password)
-        c = TestClient(app)
-        c.__enter__()
-        clients.append(c)
-        c.data = data
-        return c
-
-    yield make
-    for c in clients:
-        c.__exit__(None, None, None)
-
-
-def wait(c, timeout=60):
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        st = c.get("/api/status").json()
-        if not st["busy"]:
-            return st
-        time.sleep(0.1)
-    raise AssertionError("job did not finish")
-
-
-def scan(c, root=""):
-    assert c.post("/api/scan", json={"root": root}).status_code == 200
-    return wait(c)
-
-
-def tree(c, path=""):
-    return c.get("/api/tree", params={"path": path}).json()
-
-
-def kids(c, path=""):
-    return {k["name"]: k for k in tree(c, path)["children"]}
-
-
-def select(c, path, include=True):
-    assert c.post("/api/select", json={"path": path, "include": include}).status_code == 200
-
-
-def sync(c):
-    assert c.post("/api/sync").status_code == 200
-    return wait(c)
-
-
-def on_disk(folder):
-    out = set()
-    for root, _, names in os.walk(folder):
-        for n in names:
-            if not n.startswith(".dir_crawler.db"):
-                out.add(os.path.relpath(os.path.join(root, n), folder).replace(os.sep, "/"))
-    return out
 
 
 def test_full_scan_builds_the_catalog_without_touching_files(site, app_factory):
@@ -258,13 +196,12 @@ def test_romm_page_and_choices(site, app_factory):
     sync(c)
     d = c.get("/api/romm").json()
     assert {p["slug"] for p in d["platforms"]} == {"atari2600", "atari5200"}   # 800 only has Flux dumps
-    assert "roms/atari2600" in d["outputs"]["compose"]
+    assert d["links"]["targets"]["atari2600"] == "data/Atari/2600"      # links next to the downloads
+    assert '"/path/on/your/server:/romm/library/roms"' in d["outputs"]["compose"]
     names = {p["slug"]: p["name"] for p in d["slugs"]}
     assert len(names) > 400 and names["satellaview"] == "Satellaview" and "Super Nintendo" in names["snes"]
-    d = c.post("/api/romm/options", json={"romm_folder": "/path/to/roms"}).json()
-    # one "RomM folder" setting: the downloads are where they sit inside it (here: .../roms/data)
-    assert d["options"]["download_host"] == "/path/to/roms/data"
-    assert '"/path/to/roms/data/Atari/2600"' in d["outputs"]["compose"]
+    d = c.post("/api/romm/options", json={"romm_folder": "/romm/data/roms/lolroms"}).json()
+    assert d["options"]["romm_folder"] == "/romm/data/roms/lolroms" and ':/romm/data/roms"' in d["outputs"]["compose"]
     d = c.post("/api/romm/map", json={"path": "Atari/2600", "action": "skip"}).json()
     assert "atari2600" not in {p["slug"] for p in d["platforms"]}
     assert c.post("/api/romm/map", json={"path": "Atari/2600", "action": "Not A Slug"}).status_code == 400
@@ -348,9 +285,13 @@ def test_romm_links_follow_each_sync(site, app_factory, tmp_path):
     c = app_factory(site)                                        # downloads: tmp/data, links: tmp
     scan(c)
     select(c, "Atari/2600")
-    c.post("/api/romm/options", json={"method": "links", "links_dir": str(tmp_path)})
     sync(c)
     link = tmp_path / "atari2600"
+    assert not os.path.lexists(link), "no links until the RomM Mapper is set up"
+    d = c.post("/api/romm/links", json={}).json()                # "Create / update links now"
+    assert d["options"]["keep_links"] and os.readlink(link) == "data/Atari/2600"
+    os.remove(link)
+    sync(c)                                                      # from now on kept after each sync
     assert link.is_symlink() and os.readlink(link) == "data/Atari/2600"
     c.post("/api/romm/map", json={"path": "Atari/2600", "action": "skip"})   # no longer for RomM
     d = c.post("/api/romm/links", json={}).json()
@@ -361,14 +302,14 @@ def test_romm_mapper_choices_survive_restarts_and_a_lost_catalog(site, app_facto
     c = app_factory(site)
     scan(c)
     c.post("/api/romm/map", json={"path": "Atari/2600", "action": "exclude"})
-    c.post("/api/romm/options", json={"layout": "folders", "method": "links"})
+    c.post("/api/romm/options", json={"layout": "folders", "keep_links": True})
     c.__exit__(None, None, None)                                   # app closed
     backup = tmp_path / "config" / "romm-mapper.json"
     assert backup.exists()
 
     c2 = app_factory(site)                                         # restarted: still there
     d = c2.get("/api/romm").json()
-    assert d["options"]["layout"] == "folders" and d["options"]["method"] == "links"
+    assert d["options"]["layout"] == "folders" and d["options"]["keep_links"] is True
     assert c2.get("/api/settings").json()["settings"]["romm"]["map"] == {"Atari/2600": "exclude"}
     c2.__exit__(None, None, None)
 
