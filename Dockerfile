@@ -1,5 +1,12 @@
 # Rom Sync - web interface on port 8484
 #   /config  catalog, settings, selection     /data  the synced files
+
+# the dependency list on its own, so the (slow) install below is only redone when it changes -
+# not on every new version
+FROM python:3.12-slim AS deps
+COPY pyproject.toml /tmp/
+RUN python -c "import tomllib; print('\n'.join(tomllib.load(open('/tmp/pyproject.toml', 'rb'))['project']['dependencies']))" > /requirements.txt
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -18,10 +25,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=deps /requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm -rf /root/.cache
+
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install --no-cache-dir . && rm -rf /root/.cache
+RUN pip install --no-cache-dir --no-deps . && rm -rf /root/.cache
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod 755 /entrypoint.sh

@@ -1,5 +1,4 @@
 httpx[http2]>=0.27
 selectolax>=0.3.21
-rich>=13
 fastapi>=0.110
 uvicorn>=0.29
