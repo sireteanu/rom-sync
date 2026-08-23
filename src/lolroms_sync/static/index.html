@@ -98,6 +98,10 @@
       <div id="scan-stats" class="stats" hidden></div>
       <div id="sync-stats" class="stats" hidden></div>
       <p id="sync-paused" class="error small" hidden></p>
+      <div id="leftover-box" class="leftover">
+        <span id="leftover-text" class="small"></span>
+        <button id="btn-cleanup" class="btn small" title="Find files in the download folder that aren't part of the sync any more">Clean up…</button>
+      </div>
       <p id="next-run" class="muted small"></p>
     </div>
     <div class="card log-card">
@@ -159,28 +163,43 @@
   </form>
 </dialog>
 
+<dialog id="cleanup-dlg" class="dlg wide">
+  <form method="dialog" class="dlg-head"><h2>Clean up the download folder</h2><button class="btn icon" aria-label="Close">✕</button></form>
+  <p class="muted small">Files in the download folder that aren't part of the sync any more. Tick what should go;
+    nothing is deleted until you confirm. Folders Rom Sync hasn't read (or couldn't) are never listed.</p>
+  <p id="clean-loading" class="muted">Checking the download folder…</p>
+  <p id="clean-empty" class="muted" hidden>Nothing to clean up: everything in the download folder is part of the sync.</p>
+  <div id="clean-body" class="clean-body"></div>
+  <p id="clean-result" class="small" hidden></p>
+  <div id="clean-foot" class="dlg-foot" hidden>
+    <span id="clean-sel" class="muted small grow"></span>
+    <button id="clean-delete" class="btn danger" type="button">Delete selected…</button>
+  </div>
+  <div id="clean-confirm" class="confirm-bar" hidden>
+    <span id="clean-confirm-text"></span>
+    <button id="clean-confirm-no" class="btn" type="button">Cancel</button>
+    <button id="clean-confirm-yes" class="btn danger-fill" type="button">Delete</button>
+  </div>
+</dialog>
+
 <dialog id="romm-dlg" class="dlg xwide">
   <form method="dialog" class="dlg-head"><h2>RomM Mapper</h2><button class="btn icon" aria-label="Close">✕</button></form>
-  <p class="muted small">RomM sees each synced folder under its platform name - through a folder link per platform,
-    or a Docker mount per platform in <b>RomM's compose file</b>. Nothing is moved or copied, so syncing keeps working.
-    Merge the config into RomM's <code>config.yml</code>, restart RomM and scan its library.</p>
-  <label class="field inline"><span>How RomM sees the folders</span>
-    <select id="romm-method">
-      <option value="links">Platform links in one folder - RomM needs a single folder mapping</option>
-      <option value="mounts">A Docker mount per platform in RomM's compose file</option>
-    </select></label>
-  <div id="romm-links" class="links-box" hidden>
+  <p class="muted small">RomM sees each synced folder under its platform name through a <b>platform link</b>
+    (snes &rarr; lolroms/Nintendo/Super Famicom) in one links folder, so RomM needs a single folder mapping.
+    Nothing is moved or copied, so syncing keeps working. Merge the config into RomM's <code>config.yml</code>,
+    restart RomM and scan its library.</p>
+  <div id="romm-links" class="links-box">
     <div class="row2">
       <label class="field"><span>Links folder (inside Rom Sync)</span><input id="romm-linkdir" placeholder="">
         <small id="romm-linkdir-hint">Must contain the download folder. Map this same folder as RomM's roms folder.</small></label>
-      <div class="field"><span>&nbsp;</span><button id="romm-apply" class="btn" type="button">Create / update links now</button>
-        <small>They're also updated after every sync.</small></div>
+      <div class="field"><span>&nbsp;</span><button id="romm-apply" class="btn" type="button">Create / update links now</button></div>
     </div>
+    <label class="check"><input type="checkbox" id="romm-keep"> Update the links after every sync (turned on by the first "Create / update links now")</label>
     <p id="romm-applied" class="small muted" hidden></p>
   </div>
   <label class="field"><span>RomM folder</span><input id="romm-host" placeholder="/romm/library/roms/lolroms">
-    <small id="romm-host-hint">The folder on your server that RomM uses as its roms folder. Rom Sync's downloads are inside it.</small></label>
-  <label class="check"><input type="checkbox" id="romm-only"> Only folders with synced files (Docker would create missing ones empty)</label>
+    <small id="romm-host-hint">Where Rom Sync's downloads appear inside RomM's container.</small></label>
+  <label class="check"><input type="checkbox" id="romm-only"> Only folders with synced files</label>
   <label class="check"><input type="checkbox" id="romm-var"> Include subfolders such as T-En, hacks and add-ons in their platform</label>
   <label class="field inline"><span>Subfolders in config.yml</span>
     <select id="romm-layout">

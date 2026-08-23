@@ -20,6 +20,7 @@ function bytes(n) {
   return (i === 0 ? n : n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0)) + " " + u[i];
 }
 const num = (n) => (n || 0).toLocaleString();
+const nFiles = (n) => `${num(n)} ${n === 1 ? "file" : "files"}`;
 const ago = (t) => {
   if (!t) return "never";
   const s = Date.now() / 1000 - t;
@@ -407,12 +408,13 @@ function renderStatus(st) {
       ["Resumed", num(s.resumed)], ["Up to date", num(uptodate)],
       ["Failed", num(s.failed), s.failed ? "bad" : ""], ["Downloaded", bytes(s.bytes)],
       ["Speed", syncing ? bytes(s.speed) + "/s" : "-"],
-      ["Parallel", syncing ? `${s.running} (${String(s.gate).replace("at --dl-max", "at your upper limit")})` : "-"]]);
+      ["Parallel", syncing ? `${s.running} (${s.gate})` : "-"]]);
   } else sy.hidden = true;
   const paused = $("#sync-paused");
   paused.hidden = !(st.sync && st.sync.paused);
   if (!paused.hidden) paused.textContent = "Paused: " + st.sync.paused;
   renderEta(st, busy);
+  renderLeftovers(st.leftovers, busy);
   $("#next-run").textContent = st.next_run ? `Next automatic sync at ${new Date(st.next_run * 1000).toLocaleString()}` : "";
 
   // log
@@ -638,14 +640,137 @@ $("#btn-restart").addEventListener("click", async () => {
   $("#restarting").querySelector("p").textContent = "It hasn't come back after 2 minutes - check the window or container it runs in.";
 });
 
+/* ---------------------------------------------------------------- Clean up */
+const CLEAN_REASONS = {
+  gone: ["No longer on the site", "lolroms doesn't list these any more.", true],
+  part: ["Unfinished downloads that aren't needed", "Partly downloaded files of something you no longer sync.", true],
+  unticked: ["Not ticked any more", "Still on the site, but their folder isn't ticked. Leave these if you want to keep them.", false],
+};
+const CLEAN_SHOW = 500;               // rows drawn per group (the group's box still covers all)
+let cleanFiles = [];
+const cleanSel = new Set();
+function renderLeftovers(l, busy) {
+  const box = $("#leftover-box");
+  if (l && l.files) {
+    $("#leftover-text").textContent = `${nFiles(l.files)} (${bytes(l.bytes)}) in the download folder ${l.files === 1 ? "isn't" : "aren't"} part of the sync any more.`;
+    box.classList.add("has");
+  } else {
+    $("#leftover-text").textContent = l ? "Nothing to clean up in the download folder." : "";
+    box.classList.remove("has");
+  }
+  $("#btn-cleanup").textContent = l && l.files ? "Review" : "Clean up…";
+}
+function cleanCount() {
+  let n = 0, b = 0;
+  for (const f of cleanFiles) if (cleanSel.has(f.path)) { n++; b += f.size; }
+  return [n, b];
+}
+function renderCleanFoot() {
+  const [n, b] = cleanCount();
+  $("#clean-sel").textContent = n ? `${num(n)} selected (${bytes(b)})` : "Nothing selected";
+  $("#clean-delete").disabled = !n;
+  for (const g of document.querySelectorAll("#clean-body .clean-group")) {
+    const list = cleanFiles.filter((f) => f.reason === g.dataset.reason);
+    const on = list.filter((f) => cleanSel.has(f.path)).length;
+    const box = $("input.group", g);
+    box.checked = on > 0 && on === list.length;
+    box.indeterminate = on > 0 && on < list.length;
+  }
+}
+function renderClean(d) {
+  cleanFiles = d.files;
+  cleanSel.clear();
+  for (const f of cleanFiles) if (CLEAN_REASONS[f.reason][2]) cleanSel.add(f.path);
+  const body = $("#clean-body");
+  body.innerHTML = "";
+  $("#clean-confirm").hidden = true;
+  $("#clean-result").hidden = true;
+  $("#clean-empty").hidden = !!cleanFiles.length;
+  $("#clean-foot").hidden = !cleanFiles.length;
+  for (const reason of Object.keys(CLEAN_REASONS)) {
+    const list = cleanFiles.filter((f) => f.reason === reason);
+    if (!list.length) continue;
+    const [title, help] = CLEAN_REASONS[reason];
+    const g = document.createElement("section");
+    g.className = "clean-group";
+    g.dataset.reason = reason;
+    g.innerHTML = `<label class="check head"><input type="checkbox" class="group"><span><b></b> <span class="muted small"></span><br><small class="muted"></small></span></label><ul class="clean-list"></ul>`;
+    $("b", g).textContent = title;
+    $("span.muted", g).textContent = `${nFiles(list.length)}, ${bytes(list.reduce((a, f) => a + f.size, 0))}`;
+    $("small", g).textContent = help;
+    $("input.group", g).addEventListener("change", (e) => {
+      for (const f of list) e.target.checked ? cleanSel.add(f.path) : cleanSel.delete(f.path);
+      for (const c of g.querySelectorAll(".clean-list input")) c.checked = e.target.checked;
+      renderCleanFoot();
+    });
+    const ul = $("ul", g);
+    for (const f of list.slice(0, CLEAN_SHOW)) {
+      const li = document.createElement("li");
+      li.innerHTML = `<label class="check"><input type="checkbox"><span class="p"></span><span class="muted small"></span></label>`;
+      const c = $("input", li);
+      c.checked = cleanSel.has(f.path);
+      c.addEventListener("change", () => { c.checked ? cleanSel.add(f.path) : cleanSel.delete(f.path); renderCleanFoot(); });
+      $(".p", li).textContent = f.path;
+      $(".p", li).title = f.path;
+      $("span.muted", li).textContent = bytes(f.size);
+      ul.append(li);
+    }
+    if (list.length > CLEAN_SHOW) {
+      const li = document.createElement("li");
+      li.className = "muted small";
+      li.textContent = `… and ${num(list.length - CLEAN_SHOW)} more (included when the group is ticked)`;
+      ul.append(li);
+    }
+    body.append(g);
+  }
+  renderCleanFoot();
+}
+async function openCleanup() {
+  const dlg = $("#cleanup-dlg");
+  if (!dlg.open) dlg.showModal();
+  $("#clean-body").innerHTML = "";
+  $("#clean-empty").hidden = true;
+  $("#clean-foot").hidden = true;
+  $("#clean-loading").hidden = false;
+  try { renderClean(await api("/api/cleanup")); }
+  catch (e) { $("#clean-body").textContent = "Could not check the download folder: " + e.message; }
+  $("#clean-loading").hidden = true;
+}
+$("#btn-cleanup").addEventListener("click", openCleanup);
+$("#clean-delete").addEventListener("click", () => {
+  const [n, b] = cleanCount();
+  $("#clean-confirm-text").textContent = `Delete ${nFiles(n)} (${bytes(b)}) from the download folder for good? This can't be undone.`;
+  $("#clean-confirm-yes").textContent = `Delete ${nFiles(n)}`;
+  $("#clean-confirm").hidden = false;
+  $("#clean-foot").hidden = true;
+  $("#clean-confirm-no").focus();
+});
+$("#clean-confirm-no").addEventListener("click", () => { $("#clean-confirm").hidden = true; $("#clean-foot").hidden = false; });
+$("#clean-confirm-yes").addEventListener("click", async () => {
+  const yes = $("#clean-confirm-yes");
+  yes.disabled = true;
+  const paths = cleanFiles.filter((f) => cleanSel.has(f.path)).map((f) => f.path);
+  let msg, bad = false;
+  try {
+    const r = await api("/api/cleanup/delete", { method: "POST", body: { paths, confirm: true } });
+    msg = `Deleted ${nFiles(r.deleted.length)} (${bytes(r.bytes)}).`;
+    if (r.errors.length) { msg += ` ${r.errors.length} could not be deleted: ${r.errors.slice(0, 3).join("; ")}`; bad = true; }
+    if (r.skipped) msg += ` ${num(r.skipped)} were skipped because they're part of the sync again or already gone.`;
+    renderClean(await api("/api/cleanup"));
+  } catch (e) { msg = "Nothing was deleted: " + e.message; bad = true; $("#clean-confirm").hidden = true; $("#clean-foot").hidden = false; }
+  yes.disabled = false;
+  const out = $("#clean-result");
+  out.textContent = msg;
+  out.className = "small " + (bad ? "error" : "ok");
+  out.hidden = false;
+  poll(true);
+});
+
 /* ---------------------------------------------------------------- RomM */
 let romm = null;
 let rommTab = "compose";
-const ROMM_HELP_LINKS = {
-  compose: "For RomM's container: map the links folder as RomM's roms folder (replace its .../romm/library/roms line).",
-};
 const ROMM_HELP = {
-  compose: "For RomM's container: add these under the RomM service in its docker-compose.yml (next to its other volumes).",
+  compose: "For RomM's container: map the links folder as RomM's roms folder (replace its .../romm/library/roms line).",
   config: "Merge into RomM's config.yml (in its /romm/config folder), keeping your other settings.",
   list: "",
 };
@@ -733,15 +858,11 @@ function renderRomm() {
   $("#romm-list").hidden = !isList;
   $("#romm-copy").hidden = isList;
   if (isList) renderRommList(); else $("#romm-out").textContent = d.outputs[rommTab];
-  $("#romm-help").textContent = (d.options.method === "links" && ROMM_HELP_LINKS[rommTab]) || ROMM_HELP[rommTab];
-  const links = d.options.method === "links";
-  $("#romm-links").hidden = !links;
-  if (links) {
-    $("#romm-linkdir").placeholder = d.links.dir || "";
-    $("#romm-linkdir-hint").textContent = d.links.inside
-      ? `Links go in ${d.links.dir}, next to "${d.links.inside}" (the download folder ${d.links.download_dir}). Map ${d.links.dir}'s server folder as RomM's roms folder.`
-      : `The download folder (${d.links.download_dir}) must be inside the links folder.`;
-  }
+  $("#romm-help").textContent = ROMM_HELP[rommTab];
+  $("#romm-linkdir").placeholder = d.links.dir || "";
+  $("#romm-linkdir-hint").textContent = d.links.inside
+    ? `Links go in ${d.links.dir}, next to "${d.links.inside}" (the download folder ${d.links.download_dir}). Map ${d.links.dir}'s server folder as RomM's roms folder.`
+    : `The download folder (${d.links.download_dir}) must be inside the links folder.`;
   for (const t of document.querySelectorAll("#romm-dlg .tab")) t.classList.toggle("on", t.dataset.out === rommTab);
   const ref = $("#romm-dlg .ref-btn");
   ref.classList.toggle("on", isList);
@@ -780,7 +901,7 @@ function rommLoad(d) {
   $("#romm-only").checked = !!d.options.only_synced;
   $("#romm-var").checked = !!d.options.variants;
   $("#romm-layout").value = d.options.layout || "category";
-  $("#romm-method").value = d.options.method || "mounts";
+  $("#romm-keep").checked = !!d.options.keep_links;
   $("#romm-linkdir").value = d.options.links_dir || "";
   renderRomm();
 }
@@ -822,7 +943,7 @@ async function rommOptions() {
   rommLoad(await api("/api/romm/options", { method: "POST", body: {
     romm_folder: $("#romm-host").value,
     only_synced: $("#romm-only").checked, variants: $("#romm-var").checked,
-    layout: $("#romm-layout").value, method: $("#romm-method").value,
+    layout: $("#romm-layout").value, keep_links: $("#romm-keep").checked,
     links_dir: $("#romm-linkdir").value } }));
 }
 $("#btn-romm").addEventListener("click", async () => {
@@ -842,7 +963,7 @@ $("#romm-apply").addEventListener("click", async () => {
   } catch (e) { out.textContent = "Could not update the links: " + e.message; out.className = "small error"; out.hidden = false; }
   b.disabled = false;
 });
-for (const id of ["#romm-host", "#romm-only", "#romm-var", "#romm-layout", "#romm-method", "#romm-linkdir"]) $(id).addEventListener("change", rommOptions);
+for (const id of ["#romm-host", "#romm-only", "#romm-var", "#romm-layout", "#romm-keep", "#romm-linkdir"]) $(id).addEventListener("change", rommOptions);
 let rommOutTab = "compose";
 for (const t of document.querySelectorAll("#romm-dlg .tab")) t.addEventListener("click", () => { rommTab = rommOutTab = t.dataset.out; renderRomm(); });
 $("#romm-dlg .ref-btn").addEventListener("click", () => { rommTab = rommTab === "list" ? rommOutTab : "list"; renderRomm(); });
