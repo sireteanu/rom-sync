@@ -6,15 +6,11 @@
       "Bash(pytest *)",
       "Bash(python -m pyflakes *)",
       "Bash(pip install -e *)",
-      "Bash(dir-crawler --help)",
       "Bash(git status *)",
       "Bash(git diff *)",
       "Bash(git log *)",
-      "Bash(python run.py --help)",
-      "Bash(python dir-crawler.py --help)"
+      "Bash(python run.py --help)"
     ],
-    "deny": [
-      "Read(./**/*.state.db)"
-    ]
+    "deny": []
   }
 }

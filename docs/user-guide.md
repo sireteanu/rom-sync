@@ -8,11 +8,12 @@ to date, and showing it in RomM. For the technical reference, see the [README](.
 - [3. Choose what to keep](#3-choose-what-to-keep)
 - [4. Sync](#4-sync)
 - [5. Watching progress](#5-watching-progress)
-- [6. Settings](#6-settings)
-- [7. Keep it up to date automatically](#7-keep-it-up-to-date-automatically)
-- [8. Restart, shut down and update](#8-restart-shut-down-and-update)
-- [9. Show your games in RomM](#9-show-your-games-in-romm)
-- [10. Troubleshooting](#10-troubleshooting)
+- [6. Clean up files you no longer sync](#6-clean-up-files-you-no-longer-sync)
+- [7. Settings](#7-settings)
+- [8. Keep it up to date automatically](#8-keep-it-up-to-date-automatically)
+- [9. Restart, shut down and update](#9-restart-shut-down-and-update)
+- [10. Show your games in RomM](#10-show-your-games-in-romm)
+- [11. Troubleshooting](#11-troubleshooting)
 
 ---
 
@@ -34,7 +35,7 @@ The first time, the page asks you to scan. Click **Scan site**. Rom Sync reads e
 listing on lolroms.com - **no files are downloaded** - and builds a catalog of every folder and file
 with its date and size. It takes a few minutes; you can watch it in the Activity panel.
 
-Scan again whenever you want to see new folders (or let the schedule do it, see section 7). A
+Scan again whenever you want to see new folders (or let the schedule do it, see section 8). A
 folder that couldn't be read is shown in red; hover over it to see why.
 
 ## 3. Choose what to keep
@@ -67,7 +68,7 @@ that folder.
 
 The strip at the top shows how big your selection is, how much is already synced and how much is
 left to download. Your ticks are saved instantly - restarting doesn't lose them. **Clear selection**
-unticks everything (downloaded files stay where they are).
+unticks everything (downloaded files stay where they are - see section 6 to remove them).
 
 ## 4. Sync
 
@@ -106,7 +107,31 @@ Rom Sync finds by itself how many downloads the site allows at once, and slows d
 asks it to. If the site's **daily download limit** is reached, the sync pauses ("Paused: …") and
 the rest is downloaded at the next sync.
 
-## 6. Settings
+## 6. Clean up files you no longer sync
+
+Rom Sync never deletes anything by itself. After each sync it checks the download folder and, if
+it finds files that aren't part of the sync any more, the Activity panel says so - for example
+*"12 files (3.4 GB) in the download folder aren't part of the sync any more"* - with a **Review**
+button. (Without a message, the button is called **Clean up…** and checks the folder right away.)
+
+The Clean up window sorts those files into groups:
+
+| Group | What it means | Ticked at first |
+|---|---|---|
+| **No longer on the site** | lolroms removed or renamed them | yes |
+| **Unfinished downloads that aren't needed** | half-downloaded files of something you no longer sync | yes |
+| **Not ticked any more** | still on the site, but you unticked their folder | no - leave these if you want to keep them |
+
+Tick or untick whole groups or single files, then click **Delete selected…**. A red bar asks
+*"Delete 12 files (3.4 GB) from the download folder for good?"* - only **Delete 12 files** removes
+them; **Cancel** keeps everything. Folders left empty are removed too. If you tick a folder again
+later, its files are downloaded again.
+
+Rom Sync only lists files it can be sure about: folders it couldn't read (red in the tree), folders
+it hasn't read yet, hidden files and folder links are never listed. Deleting isn't possible while a
+scan or sync is running.
+
+## 7. Settings
 
 Click the gear icon.
 
@@ -124,13 +149,13 @@ Click the gear icon.
 | Continue an unfinished sync when the app starts again | After a restart, crash or reboot |
 | Ask the server about every file I already have | Exact but slow (one request per file); rarely needed |
 
-## 7. Keep it up to date automatically
+## 8. Keep it up to date automatically
 
 Set **Sync automatically every** to, say, `6` hours and **Full site scan every** to `7` days. The
 Activity panel shows when the next automatic sync will run. New files on the site arrive by
 themselves; new folders arrive too if their parent folder is ticked.
 
-## 8. Restart, shut down and update
+## 9. Restart, shut down and update
 
 - **Power button** (top right): **Restart** brings Rom Sync back in a few seconds; **Shut down**
   stops it until you start it again (Unraid: Docker tab → rom-sync → Start, or Compose Up; Windows:
@@ -140,7 +165,7 @@ themselves; new folders arrive too if their parent folder is ticked.
   the title afterwards.
 - **Theme**: the sun/moon button switches between dark and light.
 
-## 9. Show your games in RomM
+## 10. Show your games in RomM
 
 Rom Sync can show your synced folders to [RomM](https://github.com/rommapp/romm) under RomM's
 platform names (`snes`, `psx`, …) without moving or copying anything. Click **RomM Mapper** in the
@@ -165,20 +190,19 @@ doesn't lose it. A backup copy is kept next to the catalog and restored automati
 catalog is ever reset. **RomM platforms list** (the button with the book icon) opens a searchable
 reference of every platform RomM knows.
 
-**Step 3 - choose how RomM sees the folders.**
-
-*Platform links in one folder* (recommended). Rom Sync puts one link per platform in the RomM
-folder - for example `/path/to/roms/snes` pointing to `lolroms/Nintendo/Super Famicom` - and keeps
-them up to date after every sync. In RomM's compose file, map the RomM folder as RomM's roms folder:
+**Step 3 - create the platform links.** Rom Sync puts one link per platform next to its download
+folder - for example `/path/to/roms/snes` pointing to `lolroms/Nintendo/Super Famicom`. Click
+**Create / update links now** once; from then on (**Update the links after every sync** is ticked)
+they're kept up to date after every sync. In RomM's compose file, map that folder as RomM's roms
+folder (the **RomM compose** tab shows the line):
 
 ```yaml
       - /path/to/roms:/romm/library/roms
 ```
 
-Click **Create / update links now** the first time. (Rom Sync's own compose file must map the RomM
-folder and download into its `lolroms` subfolder - the example compose file does.)
-
-*A Docker mount per platform*: copy the **RomM compose** tab into RomM's compose file instead.
+(Rom Sync's own compose file must map that folder and download into its `lolroms` subfolder - the
+example compose file does.) Firmware folders aren't linked: the dialog lists them so you can copy
+them to RomM's bios folder.
 
 **Step 4 - the config file.** Copy the **config.yml** tab and merge it into RomM's `config.yml`
 (in RomM's config folder), keeping your other settings. It tells RomM which subfolders belong to a
@@ -187,7 +211,7 @@ platform (using `{category}` levels, so new subfolders are picked up), which sub
 
 **Step 5** - restart RomM and scan its library.
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 **The page doesn't open / Rom Sync won't start.** On Windows run `start.bat` (the window stays open
 on errors) and look at `config\rom-sync.log`. If it says the port is in use, another program uses

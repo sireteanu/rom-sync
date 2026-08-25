@@ -5,6 +5,34 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-24
+
+A clean-up release: Rom Sync is now only the web app, and it can tidy the download folder.
+
+### New
+- **Clean up**: after each sync, Rom Sync checks the download folder for files that aren't part of
+  the sync any more - removed from the site, in folders you unticked, or half-finished downloads you
+  no longer need - and the Activity panel says how many there are. **Review** (or **Clean up…**)
+  lists them by group; tick what should go, click **Delete selected…** and confirm. Nothing is ever
+  deleted without that confirmation, files in folders Rom Sync couldn't read are never listed, and
+  files you only unticked aren't ticked for deletion at first.
+
+### Changed
+- **RomM Mapper uses platform links only.** The "Docker mount per platform" choice is gone; the
+  **RomM compose** tab now shows the single line that maps the links folder as RomM's roms folder.
+  Links are created the first time you click **Create / update links now**, and from then on kept
+  up to date after every sync (**Update the links after every sync**). If you used links before,
+  nothing changes for you.
+- The `dir-crawler` command-line tool is removed; its engine lives on inside Rom Sync. One less
+  dependency (`rich`).
+
+### Improved
+- Updating on Unraid is faster: **Compose Up** only reinstalls Rom Sync's dependencies when they
+  change, not on every new version.
+- The page asks the server for less work while idle (selection totals are reused until something
+  changes).
+- Every push to GitHub now runs the full test suite automatically.
+
 ## [1.2.10] - 2026-08-01
 
 ### Improved

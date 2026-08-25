@@ -1,19 +1,21 @@
 # Rom Sync (lolroms-sync)
 
-Web app (and the original CLI) for keeping local copies of lolroms.com folders in sync.
-`lolroms_sync` is the web interface: it scans the whole site into a catalog, shows a folder tree
-with tri-state ticks, and syncs the ticked folders. `dir_crawler` is the engine it shares with the
-command-line tool (forked from lolroms-downloader v3.2). Python 3.9+, async (httpx), FastAPI.
+Web app for keeping local copies of lolroms.com folders in sync. `lolroms_sync` scans the whole
+site into a catalog, shows a folder tree with tri-state ticks, syncs the ticked folders, cleans up
+files that aren't part of the sync, and maps folders to RomM. `lolroms_sync.core` is the sync
+engine (forked from lolroms-downloader v3.2; its command-line tool was removed in 1.3.0).
+Python 3.9+, async (httpx), FastAPI.
 It runs on **Windows** (`start.bat`) and in **Docker on Unraid** -
 keep both working: Windows paths and console, and PUID/PGID/UMASK plus `/config` and `/data` in Docker.
 
 ## Commands
 - Install (dev): `pip install -e ".[dev]"`
-- Tests: `python -m pytest` (~90 s; all traffic goes to the in-process `tests/mock_site.py`)
+- Tests: `python -m pytest` (~90 s; all traffic goes to the in-process `tests/mock_site.py`);
+  the `Tests` workflow runs them and pyflakes on every push (Python 3.9 and 3.12)
 - Lint: `python -m pyflakes src tests`
 - Web app: `python run.py [--data DIR] [--port 8484] [--host 0.0.0.0] [--password X]`
   (Windows users: `start.bat`; installed: `lolroms-sync`)
-- CLI: `python dir-crawler.py URL [--download DIR]` (installed: `dir-crawler`)
+- RomM output from a catalog: `python -m lolroms_sync.romm --config DIR [compose|config]`
 - Docker: `docker build -t lolroms-sync .` / `docker compose up -d --build`
 
 ## Layout
@@ -25,16 +27,19 @@ src/lolroms_sync/            the web app
   catalog.py    SQLite in <config>/catalog.db: dirs, files, selection, settings, scans, history;
                 tree() = folders with recursive totals (cached; invalidate() on structural change)
   scanner.py    reads listing pages (never files) into the catalog; prunes what the site dropped
+  cleanup.py    Clean up: walk the download folder, judge files (gone / part / unticked), delete
+  romm.py       RomM Mapper (platform links + config.yml); romm_slugs.py vendored slugs
   static/       index.html, app.css, app.js - no build step, no CDN (works offline on a LAN)
-src/dir_crawler/             the engine (also the CLI)
-  download.py   Downloader: plan() + download() shared by CLI and web app; run_item() = one worker
-                step (pushed-back files go back in the queue and free their slot)
-  sync.py       FileInfo, Manifest (<data>/.dir_crawler.db), plan(), site_timestamp(), find_size()
-  extract.py    LinkExtractor incl. per-file date/size from the listing row
-  limits.py     Limiter (page pacing), DownloadGate (auto parallel downloads), RateLimit
-  crawler.py / cli.py / state.py / urls.py / util.py / constants.py / config.py   CLI + helpers
-docker/entrypoint.sh, Dockerfile, docker-compose.yml, unraid/lolroms-sync.xml, .github/workflows/
-start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never shadow the packages)
+  core/         the sync engine
+    download.py Downloader: plan() + download(); run_item() = one worker step (pushed-back files
+                go back in the queue and free their slot)
+    sync.py     FileInfo, Manifest (<data>/.dir_crawler.db), plan(), site_timestamp(), find_size()
+    extract.py  LinkExtractor incl. per-file date/size from the listing row
+    limits.py   Limiter (page pacing), DownloadGate (auto parallel downloads), RateLimit
+    urls.py / util.py / constants.py / config.py   helpers
+tests/  conftest (app_factory + API helpers), test_app, test_engine, test_cleanup, test_romm, test_units
+docker/entrypoint.sh, Dockerfile (deps in their own layer), docker-compose.yml, unraid/, .github/workflows/
+start.bat, run.py   launchers (`run` name so it never shadows the package)
 ```
 
 ## Web app rules
@@ -54,6 +59,15 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   one-segment `?dir=` link from the root page during a full scan. Mock: `HEADER_DIRS`.
 - Column sorting (Folder/Files/Size/Updated/Synced: asc -> desc -> name order) is client-side in
   app.js (`reorder()`); empty folders always sort last. Choice kept in localStorage.
+- **Clean up** (`cleanup.py`): after a sync that wasn't stopped or paused, `Engine._check_leftovers()`
+  stores a summary in status `leftovers`. Leftovers: `gone` (not listed by its folder, which was read
+  without errors; unknown folders only after a finished full scan), `part` (.part of an unwanted
+  file), `unticked`. Never listed: unread/failed folders, dot-files (manifest), symlinks.
+  **Nothing is deleted without the user's confirmation**: POST /api/cleanup/delete needs
+  `confirm: true`, refuses while busy, and re-checks so only current leftovers are removed; then
+  empty folders go, `Manifest.forget()` and `Catalog.forget_local()`. Never delete anything else
+  from the download folder.
+- Status `selection` is cached per (tree object, rules) in `Engine._selection_totals()`.
 - Status `sync` has `bytes_planned`, `bytes_left`, `files_left`, `eta` (seconds, from a ~2 min speed
   average) for the "This sync" box.
 - **Interrupted syncs resume**: `Engine.start()` stores `interrupted_job`; it's cleared when the
@@ -67,8 +81,9 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
 - **RomM Mapper** (`romm.py`, `romm_slugs.py` vendored from rommapp/romm platform_slugs.py): resolves
   each folder to platform/merge/bios/skip(/exclude)/unmapped from `RULES` + user map (settings `romm`,
   mirrored to `<config>/romm-mapper.json` and restored from it at start if the catalog lost it;
-  one "RomM folder" (`romm_folder`) = RomM's roms folder on the host, download host path derived),
-  groups by slug, mounts the common folder, and writes compose / Unraid / config.yml.
+  one "RomM folder" (`romm_folder`) = where the downloads appear inside RomM's container; the
+  library path is derived from it), groups by slug (several folders -> their common folder, the
+  "mount"), and writes the RomM compose line and config.yml.
   Layout `category` (default) writes one `{category}`/`{subcategory}` template per depth; every
   subfolder of a folder RomM descends into that isn't wanted goes into the (global, case-insensitive)
   multi_file exclude list. A wanted folder whose name is excluded elsewhere gets an extra exact-name
@@ -76,27 +91,29 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   at a wildcard depth forces exact names for that platform (`_templates()`). RomM facts it
   relies on are in the module docstring - re-check them against RomM's config_manager.py when
   RomM changes. Never move or rename the user's folders for RomM.
-  Method `links`: RomM's roms folder = links folder (default: parent of the download
-  folder, e.g. /romm with downloads in /romm/lolroms); `apply_links()` keeps relative symlinks
-  `<slug> -> lolroms/<mount>` after every sync (`Engine._update_romm_links`) and only ever changes
-  links pointing into the download folder; config.yml adds `exclude.platforms: [lolroms]`.
+  Platform links only (Docker mounts per platform were removed in 1.3.0; `options_from()` converts
+  old `method`/`host_path`/`library` keys): RomM's roms folder = links folder (default: parent of the
+  download folder, e.g. /romm with downloads in /romm/lolroms); `apply_links()` keeps relative
+  symlinks `<slug> -> lolroms/<mount>` and only ever changes links pointing into the download folder;
+  config.yml adds `exclude.platforms: [lolroms]`. A sync updates links only when `keep_links` is on
+  (set by POST /api/romm/links, i.e. "Create / update links now"), so non-RomM users get no links.
 - The display name is **Rom Sync**; package, module, image and folder names stay `lolroms-sync`.
 - Interface copy: plain sentence-case verbs ("Scan site", "Sync selected"); errors say what to do.
   Dark is the default theme; light via the header toggle (localStorage).
 
 ## How it works (keep these invariants)
-1. **File links are recognised from the URL alone and never fetched while crawling.**
+1. **File links are recognised from the URL alone and never fetched while scanning.**
    lolroms file links look like `/?file=Atari%2F5200%2FGame%20(USA).7z` — the extension is in a
    *query value*, not the path. `UrlRules.file_ext()` and the fast path in `LinkExtractor.extract()`
-   check both. Only `--download` ever requests a file URL. (Regression history: v2 treated these
+   check both. Only a sync ever requests a file URL. (Regression history: v2 treated these
    as pages, fetched every file and collapsed them onto the site root, which caused a crawl loop.)
-2. **Scope**: only the start listing and its subfolders are crawled. For `?dir=Atari`, a URL is in
+2. **Scope**: only the start listing and its subfolders are read. For `?dir=Atari`, a URL is in
    scope if its `dir` value equals `Atari` or starts with `Atari/` (case-insensitive). The sidebar
    (all top-level dirs), the logo link to `/` and nav links are all out of scope or ignored.
 3. **Canonical URLs**: only the start URL's query params are kept (`dir`), so `&sort=` variants
-   dedupe to one request. `--keep-params all` disables this.
+   dedupe to one request (`Config.keep_params`).
 4. **Ignored page regions**: `<nav>`, site-level `<header>`, role=navigation/banner, NAV_TOKENS
-   class/ids (unless `--include-nav`), and always `.sortbar` / `.back` (lolroms' sort bar and
+   class/ids (`Config.ignore_nav`), and always `.sortbar` / `.back` (lolroms' sort bar and
    "⬅ Back" link).
 5. **Downloads** go to `<folder>/<path from the file URL>`, written as `.part` and renamed only when
    complete; retries resume with `Range` + `If-Range`. A `text/html` response for a file is rejected,
@@ -114,13 +131,12 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
    resumed/updated. Sites without dates/sizes use conditional GET (If-None-Match/If-Modified-Since -> 304).
 5b. **DownloadGate** (auto parallel downloads): ramps +1 while every slot is busy and files wait; on
    push-back (429/503, refused connection, HTML instead of file) sets ceiling = running-1; re-probes
-   ceiling+1 every `--dl-probe-secs`; a level that worked before needs 2 push-backs within 10 s to be
+   ceiling+1 every 2 min (`tuning["probe"]`); a level that worked before needs 2 push-backs within 10 s to be
    lowered; the limit is stored per host in the manifest (`max_parallel:<host>`). Push-back retries
    don't use up a file's normal retries. Repeated HTML pages with no successes -> downloads pause
-   (daily limit) and stay queued for `--resume`.
-6. **State**: every page/file has a row in `<output>.state.db`; nothing is "done" until its row says so,
-   so Ctrl+C at any point is safe and `--resume` continues. Without `--resume`, an unfinished state
-   is refused (exit 2) unless `--fresh` is passed.
+   (daily limit) and stay queued for the next sync.
+6. **State**: a file is only final once renamed from `.part` and recorded in the manifest, so a stop,
+   crash or restart at any point is safe; the next sync resumes (`interrupted_job`).
 7. **Politeness**: `Limiter` halves parallelism and doubles the delay on 429/503/timeouts/slow
    responses and recovers gradually. Downloads default to 2 at a time. Respect robots.txt by default.
 
@@ -146,22 +162,18 @@ start.bat, run.py, dir-crawler.py   launchers (hyphen/`run` names so they never 
   changed from this session (403) - give the user a `gh repo edit` command if it needs updating.
 
 ## Conventions
-- Dependencies: httpx[http2], selectolax, rich, fastapi, uvicorn (+ pytest/pyflakes for dev). Ask before adding more.
-- Log through `logging.getLogger("dircrawl")`; the CLI decides rich vs plain output. Never `print`
-  inside the crawler (it breaks the live panel).
+- Dependencies: httpx[http2], selectolax, fastapi, uvicorn (+ pytest/pyflakes for dev). Ask before adding more.
+- Log through `logging.getLogger("dircrawl")` (the page's log and `rom-sync.log` read it). Never `print`.
 - Every user-visible behaviour change gets a test in `tests/` against `MockSite`. If a real-site
   quirk is discovered, reproduce it in `tests/mock_site.py` first, then fix.
 - **Tests and development never touch the real lolroms.com.** Only run the tool against the real
-  site when the user asks, and never start a `--download` of the real site unless they asked for it
+  site when the user asks, and never start a download of the real site unless they asked for it
   (it can be hundreds of GB).
-- Keep the CLI backwards compatible: existing flags keep their meaning; new behaviour behind new flags.
-- Output CSVs are written with a UTF-8 BOM (Excel on Windows); `.txt` lists are plain UTF-8.
-  Writes go through `.tmp` + `os.replace` and tolerate the file being open in Excel.
+- Keep saved settings working across versions: convert old keys instead of dropping a user's choices.
+- Files Rom Sync writes for itself (romm-mapper.json) go through `.tmp` + `os.replace`.
 
 ## Gotchas
-- `asyncio.Condition` must be created inside the running loop (Limiter is built in `Crawler.run`).
-- The rich `Live` panel is refreshed from the ticker coroutine (auto_refresh off) to avoid
-  cross-thread reads of crawler state.
+- `asyncio.Condition` must be created inside the running loop (Limiter is built in `Scanner.run`).
 - `selectolax.parser` (Modest) is deprecated; use `selectolax.lexbor`.
 - Listing dates have no time zone, so for adopted files a site date only counts as "newer" when it is
   more than a day after the local mtime. Files the tool downloaded compare exact listing text instead.

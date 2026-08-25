@@ -1,24 +1,23 @@
 ---
 name: investigate-site
-description: Work out why the crawler misbehaves on a site (wrong folders, missed files, crawl escaping scope, loops, slowness) or adapt it to a new directory-listing site. Use when a crawl gives unexpected results or the user wants to support a different site.
+description: Work out why Rom Sync reads lolroms.com wrongly (missing folders or files, wrong dates or sizes, a scan leaving its folder, loops, slowness) or adapt it to a change in the site's markup. Use when a scan or sync gives unexpected results.
 argument-hint: <url of a listing page that behaves wrongly>
-allowed-tools: WebFetch, Read, Grep, Glob, Bash(python -m pytest *), Bash(python dir-crawler.py *)
+allowed-tools: WebFetch, Read, Grep, Glob, Bash(python -m pytest *)
 ---
 
 Investigate: $ARGUMENTS
 
-1. **Look at the real page structure.** Fetch one listing page and one deeper sub-folder page. Record:
-   - how folder links are formed (path `/a/b/`, or query `?dir=a%2Fb`)
-   - how file links are formed and where they are hosted (path extension or `?file=...ext`)
+1. **Look at the real page structure.** Fetch one listing page and one deeper sub-folder page
+   (ask the user first - development never touches the real site unasked). Record:
+   - how folder links are formed (`?dir=a%2Fb`) and which sections are only linked from the header
+   - how file links are formed (`?file=...ext`) and the markup of a file row (date, size)
    - the class or id names of the header, nav, sidebar, sort bar and back link, plus any pagination
-   - the logo / home link
-2. **Reproduce small.** Run the tool against the URL with `--max-pages 20 -v --plain` and compare
-   the log with step 1. Typical causes are a file-link format that isn't recognised, a chrome
-   region that isn't ignored (use `--ignore-class` / `--nav-selector`), scope params that differ
-   from the start URL (`--keep-params`), or a new file extension (`--download-ext`).
-3. **Fix with a test first.** Model the quirk in `tests/mock_site.py` (or a new fixture), add a
-   failing test, then change `urls.py`, `extract.py` or `constants.py`. Keep the invariants in
-   `CLAUDE.md`, above all that file links are never fetched during a listing crawl.
-4. Run `python -m pytest` and report what was wrong, what changed, and the command the user should run now.
+2. **Reproduce in the mock.** Copy the quirk into `tests/mock_site.py` (the mock must match the live
+   markup, see CLAUDE.md "Gotchas") and add a failing test in `tests/test_engine.py` or
+   `tests/test_app.py` that goes through the web API.
+3. **Fix.** Change `src/lolroms_sync/core/extract.py`, `core/urls.py`, `core/constants.py` or
+   `scanner.py`. Keep the invariants in `CLAUDE.md`, above all that file links are never fetched
+   while reading listings.
+4. Run `python -m pytest` and `python -m pyflakes src tests`, then report what was wrong and what changed.
 
-Do not run large crawls or any download of the real site while investigating.
+Never start a full scan or any download of the real site while investigating.

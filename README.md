@@ -30,8 +30,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 8. [HTTP API](#http-api)
 9. [Code map](#code-map)
 10. [Development, tests and releases](#development-tests-and-releases)
-11. [The `dir-crawler` command-line tool](#the-dir-crawler-command-line-tool)
-12. [Facts about lolroms.com this relies on](#facts-about-lolromscom-this-relies-on)
+11. [Facts about lolroms.com this relies on](#facts-about-lolromscom-this-relies-on)
 
 ---
 
@@ -48,9 +47,10 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 | Speed | Parallel downloads ramp up until the server pushes back, settle one below, re-probe every 2 minutes and remember the limit. Optional speed cap and free-space guard. |
 | Daily limit | If lolroms starts sending its "download limit" web page instead of files, downloads pause and continue at the next sync. |
 | Progress | Activity panel (counts, speed, parallel downloads), **This sync** box (total size, files left, time remaining), **Downloading** box (one progress bar per file), live log. |
+| Clean up | After each sync, lists the files in the download folder that aren't part of the sync any more (removed from the site, in folders you unticked, unneeded `.part` files). **Clean up** shows them grouped; you tick what goes and confirm before anything is deleted. |
 | Schedule | Optional automatic sync every N hours and a full site scan every N days. |
 | Reliability | A sync cut off by a restart, crash or reboot continues by itself at the next start. Power menu: **Restart** / **Shut down**. Starting a second copy just opens the running one. |
-| RomM | **RomM Mapper** maps every folder to a RomM platform (built-in rules, editable per folder from a dropdown, including "exclude"). Generates RomM's `config.yml`, and either keeps one folder link per platform (one RomM mapping) or writes one Docker mount per platform. Choices are saved instantly and backed up next to the catalog. |
+| RomM | **RomM Mapper** maps every folder to a RomM platform (built-in rules, editable per folder from a dropdown, including "exclude"). Keeps one folder link per platform next to the downloads (so RomM needs one folder mapping) and generates RomM's `config.yml`. Choices are saved instantly and backed up next to the catalog. |
 | Interface | Dark (default) or light theme, works on a phone (Folders / Activity tabs at the bottom), optional password (HTTP Basic), no external resources (works on a LAN without internet for the page itself). |
 
 ---
@@ -125,7 +125,8 @@ Catalog and settings live in `config\` next to `start.bat`; the log is `config\r
 - Only the file types chosen in Settings are counted (default **archives**: zip, 7z, rar, tar, gz…;
   "everything" adds iso, chd, ROM images…).
 - After a complete scan, files and folders the site no longer lists are removed from the catalog
-  (only below folders that were read successfully). Your downloaded files are never deleted.
+  (only below folders that were read successfully). Your downloaded files are never deleted by a
+  scan; see [Clean up](#clean-up).
 - A folder that couldn't be read is shown in red with the error; it doesn't stop the scan.
 
 ### Selection rules
@@ -175,11 +176,33 @@ downloaded before:
 - **Schedule**: with "Sync automatically every N hours", the next run is N hours after the last sync
   finished; it becomes a scan+sync when the last full scan is older than "Full site scan every N days".
 
+### Clean up
+
+`cleanup.py`. After every sync that finishes (not stopped or paused), and whenever the **Clean up**
+dialog opens, Rom Sync walks the download folder and judges each file against the catalog:
+
+| Group | Meaning | Ticked by default |
+|---|---|---|
+| **No longer on the site** (`gone`) | Not in the listing of its folder, which was read without errors; or its folder is gone and a full scan has finished since | yes |
+| **Unfinished downloads that aren't needed** (`part`) | A `.part` file whose finished file isn't wanted (wanted ones are resumed by the next sync) | yes |
+| **Not ticked any more** (`unticked`) | Still on the site, but its folder isn't ticked or its type isn't synced | no |
+
+- Never listed: folders Rom Sync hasn't read or couldn't read (red in the tree), anything before
+  the first full scan for folders the catalog doesn't know, dot-files (including the manifest
+  `.dir_crawler.db`), `Thumbs.db`/`desktop.ini`, and symlinks (never followed or deleted).
+- The Activity panel says how many files/bytes were found ("Review"); the log has a line too.
+- Deleting needs two clicks: **Delete selected…** then **Delete N files** in the confirmation bar.
+  The API refuses a delete without `confirm: true` and while a scan or sync runs (409). Only paths
+  that are still leftovers when the delete runs are removed (anything that became part of the sync
+  again, or a path outside the download folder, is skipped). Folders left empty are removed (never
+  the download folder itself), the manifest forgets the files, and the catalog stops counting them
+  as synced, so ticking them again downloads them again.
+
 ### Interface
 
 - Header: title with **version** (links to its release notes), job pill, **Scan site**, **Sync
   selected**, **Stop**, **RomM Mapper**, power menu (**Restart**, **Shut down**), theme toggle, Settings.
-- Storage strip, folder tree, Activity (job line, This sync box, counters), Log, Downloading.
+- Storage strip, folder tree, Activity (job line, This sync box, counters, Clean up), Log, Downloading.
 - The page polls `/api/status` every second while busy, every 4 s when idle.
 
 ---
@@ -219,17 +242,19 @@ Arcade boards without a RomM slug (Naomi, Atomiswave, Chihiro…) become custom 
 
 ### How RomM sees the folders
 
-- **Platform links in one folder** (recommended): Rom Sync keeps relative folder links next to its
-  download folder, e.g. in `/path/to/roms`:
-  `snes -> lolroms/Nintendo/Super Famicom`, `satellaview -> lolroms/Nintendo/Super Famicom/Satellaview`.
-  Map that one folder as RomM's roms folder:
-  `- /path/to/roms:/romm/library/roms`. Links are created/updated after every sync and
-  with **Create / update links now**. Only links pointing into the download folder are ever changed
-  or removed; real folders and other links are left alone (reported as skipped). The download
-  folder must be inside the links folder (default links folder: its parent).
-  Firmware isn't linked (RomM's bios folder is separate).
-- **A Docker mount per platform**: the dialog writes read-only bind mounts for RomM's container
-  (docker-compose `volumes:`), including firmware to `bios/<slug>`.
+Rom Sync keeps relative **platform links** next to its download folder, e.g. in `/path/to/roms`:
+`snes -> lolroms/Nintendo/Super Famicom`, `satellaview -> lolroms/Nintendo/Super Famicom/Satellaview`.
+Map that one folder as RomM's roms folder (the **RomM compose** tab shows the line):
+`- /path/to/roms:/romm/library/roms`.
+
+- **Create / update links now** makes the links and turns on **Update the links after every sync**
+  (setting `keep_links`); until then a sync never creates links, so people who don't use RomM get
+  none. Only links pointing into the download folder are ever changed or removed; real folders and
+  other links are left alone (reported as skipped).
+- The download folder must be inside the links folder (default links folder: its parent).
+- Firmware isn't linked (RomM's bios folder is separate); the dialog lists the folders to copy.
+- Until 1.3.0 a second method wrote one Docker mount per platform; it was removed. Saved settings
+  from then are understood (`method: links` turns into `keep_links`).
 
 ### The generated `config.yml`
 
@@ -267,12 +292,11 @@ system:
   exact names.
 - RomM can't be pointed at a nested folder by `config.yml` alone: a per-platform template must use
   `{platform}` (or the platform's own key) as the platform folder, and all platform folders must sit
-  directly in one folder - so `"snes": "roms/Super Famicom/{game}"` is refused. The links (or mounts)
-  provide those folders.
+  directly in one folder - so `"snes": "roms/Super Famicom/{game}"` is refused. The links provide
+  those folders.
 - Options: **RomM folder** - where Rom Sync's downloads appear inside RomM's container (default
-  `/romm/library/roms/lolroms`; RomM's library path is derived from it). A server path saved by
-  older versions is still used for the per-platform Docker mounts' sources; otherwise those show
-  `/path/on/your/server`. Only folders with synced files (default on).
+  `/romm/library/roms/lolroms`; RomM's library path, used in the compose line, is derived from it).
+  **Links folder** (default: the download folder's parent). Only folders with synced files (default on).
 - Command line: `python -m lolroms_sync.romm --config config [compose|config]`.
 
 ---
@@ -295,7 +319,7 @@ Stored in the catalog (`settings` table); changed in the Settings dialog or `POS
 | `refresh_before_sync` | `true` | Re-read the ticked folders' listings before each sync |
 | `resume_interrupted` | `true` | Continue an unfinished sync when the app starts |
 | `check_remote` | `false` | Ask the server about every existing file (exact, one request per file) |
-| `romm` | `{}` | RomM Mapper: `romm_folder`, `only_synced`, `variants`, `layout` (`category`/`folders`), `method` (`links`/`mounts`), `links_dir`, `map` (your folder choices). Older `host_path` (download folder on the server) is still read. Mirrored to `<config>/romm-mapper.json` |
+| `romm` | `{}` | RomM Mapper: `romm_folder`, `only_synced`, `variants`, `layout` (`category`/`folders`), `links_dir`, `keep_links`, `map` (your folder choices). Older `method`/`host_path`/`library` keys are converted or dropped. Mirrored to `<config>/romm-mapper.json` |
 | `interrupted_job` | `""` | Internal: set while a sync runs |
 
 ---
@@ -331,7 +355,7 @@ answers like Rom Sync, a new start just opens the running copy; otherwise it exp
 | `<data>/<site path>` | Synced files, same folder structure as the site (`Nintendo/Super Famicom/…`) |
 | `<data>/.dir_crawler.db` | Manifest: what the listing said for each saved file, Last-Modified/ETag, per-site parallel limit |
 | `<data>/…/*.part` | Unfinished downloads (resumed later) |
-| links folder (RomM links mode) | `<slug>` → `lolroms/<path>` relative symlinks |
+| links folder (RomM Mapper) | `<slug>` → `lolroms/<path>` relative symlinks |
 
 Copy `catalog.db` to move your scan, ticks and RomM choices to another machine; copy the download
 folder including `.dir_crawler.db` to avoid downloading again (files are adopted otherwise).
@@ -344,7 +368,7 @@ All JSON; the page uses nothing else.
 
 | Method & path | Purpose |
 |---|---|
-| `GET /api/status?log_since=N` | Version, busy, job, catalog totals, selection totals, scan / sync progress (incl. `bytes_planned`, `bytes_left`, `files_left`, `eta`, `active` downloads), next run, new log lines |
+| `GET /api/status?log_since=N` | Version, busy, job, catalog totals, selection totals (cached until the tree or ticks change), scan / sync progress (incl. `bytes_planned`, `bytes_left`, `files_left`, `eta`, `active` downloads), `leftovers` (Clean up summary from the last check, or null), next run, new log lines |
 | `GET /api/tree?path=P` | Folder node and its children (counts, sizes, newest, synced, `state`, `own_*`, `own_state`) |
 | `GET /api/search?q=` | Folders matching a name |
 | `GET /api/files?path=P` | Files directly in a folder with status |
@@ -354,6 +378,8 @@ All JSON; the page uses nothing else.
 | `GET/POST /api/settings` | Read / change settings (400 with a message on invalid values) |
 | `GET /api/history` | Last jobs |
 | `GET /api/romm` · `POST /api/romm/options` · `POST /api/romm/map {path, action}` · `POST /api/romm/links` | RomM dialog data, options, folder choices, create/update links |
+| `GET /api/cleanup` | Check the download folder now: `files` `[{path, size, reason, url?}]` (`reason` `gone`/`part`/`unticked`) and `summary` |
+| `POST /api/cleanup/delete` `{paths, confirm: true}` | Delete those leftovers -> `{deleted, bytes, errors, skipped, summary}`; 400 without `confirm`, 409 while busy |
 | `POST /api/restart` · `POST /api/shutdown` | Restart (re-execs the program) / end it |
 | `GET /api/health` | `{"ok": true}` (Docker health check; no password) |
 
@@ -366,24 +392,29 @@ src/lolroms_sync/            the web app
   __main__.py   options / env vars, port check, log file, uvicorn, restart (re-exec) / shutdown
   web.py        FastAPI routes and Basic auth
   engine.py     one job at a time (scan | sync | scan+sync), progress, ETA, LogBuffer, scheduler,
-                interrupted-sync resume, folder dating and RomM links after a sync
+                interrupted-sync resume, folder dating, RomM links and the Clean up check after a sync
   catalog.py    SQLite catalog; tree() with recursive totals (cached); selection rules
                 (effective / effective_files / state_of / select / _fold)
   scanner.py    reads listing pages into the catalog; header_dirs() for header-only sections; prune
-  romm.py       RomM mapping (RULES, Mapping, templates, compose/unraid/config.yml, apply_links)
+  cleanup.py    Clean up: walk the download folder, judge files (gone/part/unticked), delete confirmed ones
+  romm.py       RomM mapping (RULES, Mapping, templates, compose line, config.yml, apply_links)
   romm_slugs.py RomM platform slugs with display names (vendored)
   static/       index.html, app.css, app.js - no build step, no CDN
-src/dir_crawler/             the engine shared with the CLI
-  download.py   Downloader: plan() + download(), .part/resume, dates, permissions, run_item()
-  sync.py       FileInfo, Manifest, plan(), site_timestamp(), stamp_file(), stamp_folders()
-  extract.py    LinkExtractor (links + per-file date/size from listing rows)
-  limits.py     Limiter (page pacing), DownloadGate (auto parallel downloads), RateLimit
-  urls.py / config.py / constants.py / util.py / state.py / crawler.py / cli.py
+  core/         the sync engine (from lolroms-downloader; its command-line tool was removed in 1.3.0)
+    download.py   Downloader: plan() + download(), .part/resume, dates, permissions, run_item()
+    sync.py       FileInfo, Manifest, plan(), site_timestamp(), stamp_file(), stamp_folders()
+    extract.py    LinkExtractor (links + per-file date/size from listing rows)
+    limits.py     Limiter (page pacing), DownloadGate (auto parallel downloads), RateLimit
+    urls.py / config.py / constants.py / util.py
 tests/          pytest against tests/mock_site.py (a local copy of lolroms' markup); never the real site
+                test_app (API, selection, settings, RomM via the app), test_engine (downloading, resume,
+                updates, dates, parallel downloads, listing parsing), test_cleanup, test_romm, test_units
 docker/         entrypoint.sh (PUID/PGID/UMASK), unraid-update.sh
 unraid/         docker-compose.yml (Compose Manager), lolroms-sync.xml (Docker-tab template)
-.github/workflows/  release.yml (GitHub release per version), docker.yml (registry image, manual)
-start.bat, run.py, publish.bat, dir-crawler.py   launchers / helpers
+.github/workflows/  tests.yml (pytest + pyflakes on every push, Python 3.9 and 3.12),
+                release.yml (GitHub release per version), docker.yml (registry image, manual)
+Dockerfile      installs the dependencies in their own layer (rebuilt only when they change)
+start.bat, run.py, publish.bat   launchers / helpers
 ```
 
 ---
@@ -392,7 +423,7 @@ start.bat, run.py, publish.bat, dir-crawler.py   launchers / helpers
 
 ```
 pip install -e ".[dev]"
-python -m pytest            # ~90 tests, ~2 min, all against the in-process mock site
+python -m pytest            # ~95 tests, ~1.5 min, all against the in-process mock site
 python -m pyflakes src tests
 python run.py --data downloads --config config
 ```
@@ -405,19 +436,9 @@ python run.py --data downloads --config config
   (1.2.6 → 1.2.7); the middle number only for significant changes (decided by the owner). Bump
   `pyproject.toml` and `src/lolroms_sync/__init__.py`, add `## [x.y.z] - date` to the changelog,
   push to `main`: the `Release` workflow publishes GitHub release `vx.y.z` with that section as its
-  text. Published releases are never edited.
+  text. A published section is only edited to correct it; the workflow then updates the release text.
+- The `Tests` workflow runs the suite and pyflakes on every push.
 - Unraid picks up `main` on **Compose Up**. On Windows, `publish.bat` commits, pulls and pushes.
-
----
-
-## The `dir-crawler` command-line tool
-
-The original tool, sharing the engine: `python dir-crawler.py URL [options]`. It lists the folders
-of a lolroms URL that contain archives (`directories.csv`/`.txt`), with `--list-files` every file,
-and with `--download FOLDER` keeps that folder in sync the same way the web app does. Useful
-options: `--types`, `--dl-workers auto|N`, `--dl-max`, `--watch 6h`, `--check-remote`,
-`--overwrite`, `--max-rate`, `--min-free`, `--resume`/`--fresh`, `--workers`, `--delay`,
-`--max-pages`, `--max-depth`, `--plain`, `--log-file`. `python dir-crawler.py --help` lists all.
 
 ---
 
