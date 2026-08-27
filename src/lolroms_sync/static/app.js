@@ -334,12 +334,19 @@ let lastTreeRefresh = 0;
 function setStats(el, pairs) {
   el.hidden = false;
   el.innerHTML = "";
-  for (const [label, value, cls] of pairs) {
-    const d = document.createElement("div");
+  for (const [label, value, cls, kind] of pairs) {
+    // counters with a kind open the list of files behind them
+    const d = document.createElement(kind ? "button" : "div");
     d.innerHTML = `<span class="muted"></span> <b></b>`;
     d.firstChild.textContent = label;
     d.lastChild.textContent = value;
     if (cls) d.lastChild.className = cls;
+    if (kind) {
+      d.type = "button";
+      d.className = "stat-link";
+      d.title = `Show the files: ${label.toLowerCase()}`;
+      d.addEventListener("click", () => showSyncFiles(kind, label));
+    }
     el.append(d);
   }
 }
@@ -404,9 +411,9 @@ function renderStatus(st) {
   if (st.sync) {
     const s = st.sync;
     const uptodate = (s["up to date"] || 0) + (s["already in folder"] || 0);
-    setStats(sy, [["New", num(s.new)], ["Updated", num(s.updated), s.updated ? "warn" : ""],
-      ["Resumed", num(s.resumed)], ["Up to date", num(uptodate)],
-      ["Failed", num(s.failed), s.failed ? "bad" : ""], ["Downloaded", bytes(s.bytes)],
+    setStats(sy, [["New", num(s.new), "", "new"], ["Updated", num(s.updated), s.updated ? "warn" : "", "updated"],
+      ["Resumed", num(s.resumed), "", "resumed"], ["Up to date", num(uptodate), "", "uptodate"],
+      ["Failed", num(s.failed), s.failed ? "bad" : "", "failed"], ["Downloaded", bytes(s.bytes)],
       ["Speed", syncing ? bytes(s.speed) + "/s" : "-"],
       ["Parallel", syncing ? `${s.running} (${s.gate})` : "-"]]);
   } else sy.hidden = true;
@@ -601,7 +608,7 @@ $("#settings-save").addEventListener("click", async (e) => {
 
 /* ---------------------------------------------------------------- restart */
 /* power menu: Restart / Shut down */
-const powerBtn = $("#btn-power"), powerMenu = $("#power-menu");
+const powerBtn = $("#btn-menu"), powerMenu = $("#app-menu");
 function powerOpen(open) {
   powerMenu.hidden = !open;
   powerBtn.setAttribute("aria-expanded", String(open));
@@ -610,6 +617,7 @@ function powerOpen(open) {
 powerBtn.addEventListener("click", (e) => { e.stopPropagation(); powerOpen(powerMenu.hidden); });
 document.addEventListener("click", (e) => { if (!powerMenu.hidden && !powerMenu.contains(e.target)) powerOpen(false); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !powerMenu.hidden) { powerOpen(false); powerBtn.focus(); } });
+for (const b of powerMenu.querySelectorAll("button")) b.addEventListener("click", () => powerOpen(false));
 
 $("#btn-shutdown").addEventListener("click", async () => {
   powerOpen(false);
@@ -639,6 +647,96 @@ $("#btn-restart").addEventListener("click", async () => {
   }
   $("#restarting").querySelector("p").textContent = "It hasn't come back after 2 minutes - check the window or container it runs in.";
 });
+
+/* ---------------------------------------------------------------- what changed */
+const KIND = {
+  new: ["New", "ok"], updated: ["Updated", "warn"], resumed: ["Resumed", ""], uptodate: ["Up to date", ""],
+  failed: ["Failed", "bad"], deleted: ["Deleted", "bad"],
+};
+const KIND_ORDER = ["new", "updated", "resumed", "deleted", "failed"];
+const dayName = (d) => new Date(d + "T12:00:00").toLocaleDateString([], { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+function fileRow(f, third) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = "<td class=\"p\"></td><td class=\"n\"></td><td></td>";
+  tr.children[0].textContent = f.path;
+  tr.children[0].title = f.path;
+  tr.children[1].textContent = f.size ? bytes(f.size) : "-";
+  tr.children[2].textContent = third;
+  tr.children[2].title = third;
+  return tr;
+}
+async function showSyncFiles(kind, label) {
+  const dlg = $("#list-dlg");
+  $("#list-title").textContent = `${label} in this sync`;
+  $("#list-sub").textContent = "Loading…";
+  $("#list-col3").textContent = kind === "failed" ? "Why" : "Time";
+  const body = $("#list-body");
+  body.innerHTML = "";
+  if (!dlg.open) dlg.showModal();
+  try {
+    const d = await api(`/api/sync/files?kind=${kind}`);
+    $("#list-sub").textContent = d.total
+      ? `${nFiles(d.total)}, ${bytes(d.files.reduce((a, f) => a + (f.size || 0), 0))}` + (d.total > d.files.length ? ` (first ${num(d.files.length)} shown)` : "")
+      : "None in this sync.";
+    d.files.sort((x, y) => coll.compare(x.path, y.path));
+    for (const f of d.files) body.append(fileRow(f, kind === "failed" ? (f.note || "") : f.note || clock(f.t)));
+  } catch (e) { $("#list-sub").textContent = "Could not load the list: " + e.message; }
+}
+async function openChanges() {
+  const dlg = $("#changes-dlg"), box = $("#changes-days");
+  box.innerHTML = "<p class=\"muted\">Loading…</p>";
+  if (!dlg.open) dlg.showModal();
+  let days;
+  try { days = (await api("/api/changes/days")).days; }
+  catch (e) { box.textContent = "Could not load the activity log: " + e.message; return; }
+  box.innerHTML = "";
+  if (!days.length) { box.innerHTML = "<p class=\"muted\">Nothing yet - files show up here once a sync adds or changes them.</p>"; return; }
+  for (const d of days) {
+    const det = document.createElement("details");
+    det.className = "day";
+    det.innerHTML = "<summary><b></b><span class=\"chips\"></span></summary><div class=\"day-body muted small\">Loading…</div>";
+    $("b", det).textContent = dayName(d.day);
+    const chips = $(".chips", det);
+    for (const k of KIND_ORDER) {
+      if (!d.counts[k]) continue;
+      const c = document.createElement("span");
+      c.className = "chip " + KIND[k][1];
+      c.textContent = `${num(d.counts[k])} ${KIND[k][0].toLowerCase()}` + (d.bytes[k] && k !== "failed" ? ` · ${bytes(d.bytes[k])}` : "");
+      chips.append(c);
+    }
+    det.addEventListener("toggle", async () => {
+      if (!det.open || det.dataset.loaded) return;
+      det.dataset.loaded = "1";
+      const bodyEl = $(".day-body", det);
+      try {
+        const r = await api(`/api/changes?day=${d.day}`);
+        bodyEl.innerHTML = "";
+        bodyEl.className = "day-body";
+        for (const k of KIND_ORDER) {
+          const list = r.files.filter((f) => f.kind === k).sort((x, y) => coll.compare(x.path, y.path));
+          if (!list.length) continue;
+          const h = document.createElement("h3");
+          h.className = "kind-head " + KIND[k][1];
+          h.textContent = `${KIND[k][0]} (${num(d.counts[k] || list.length)})`;
+          const tbl = document.createElement("table");
+          tbl.className = "files";
+          tbl.innerHTML = `<thead><tr><th>File</th><th>Size</th><th>${k === "failed" || k === "deleted" ? "Why" : "Time"}</th></tr></thead><tbody></tbody>`;
+          for (const f of list) tbl.tBodies[0].append(fileRow(f, f.note ? `${clock(f.t)} · ${f.note}` : clock(f.t)));
+          bodyEl.append(h, tbl);
+        }
+        if (r.total > r.files.length) {
+          const p = document.createElement("p");
+          p.className = "muted small";
+          p.textContent = `Showing the newest ${num(r.files.length)} of ${num(r.total)} changes this day.`;
+          bodyEl.append(p);
+        }
+      } catch (e) { bodyEl.textContent = "Could not load this day: " + e.message; }
+    });
+    box.append(det);
+  }
+  box.querySelector("details").open = true;
+}
+$("#btn-changes").addEventListener("click", openChanges);
 
 /* ---------------------------------------------------------------- Clean up */
 const CLEAN_REASONS = {
@@ -991,12 +1089,17 @@ for (const b of document.querySelectorAll(".mtabs button")) b.addEventListener("
 try { const p = localStorage.getItem("pane"); if (p === "activity" || p === "browser") showPane(p); } catch (e) {}
 
 /* ---------------------------------------------------------------- theme */
+function themeLabel() {
+  $("#theme-label").textContent = document.documentElement.dataset.theme === "light" ? "Dark theme" : "Light theme";
+}
 $("#btn-theme").addEventListener("click", () => {
   const light = document.documentElement.dataset.theme !== "light";
   if (light) document.documentElement.dataset.theme = "light";
   else delete document.documentElement.dataset.theme;
   try { localStorage.setItem("theme", light ? "light" : "dark"); } catch (e) {}
+  themeLabel();
 });
+themeLabel();
 
 /* ---------------------------------------------------------------- start */
 renderRoot().then(() => poll());

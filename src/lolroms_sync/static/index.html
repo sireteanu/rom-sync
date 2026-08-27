@@ -25,12 +25,23 @@
     <button id="btn-sync" class="btn primary" title="Download new, incomplete and changed files in the ticked folders">Sync selected</button>
     <button id="btn-stop" class="btn danger" disabled>Stop</button>
     <button id="btn-romm" class="btn" title="Map your synced folders to RomM platforms, without moving them">RomM Mapper</button>
+    <button id="btn-changes" class="btn" title="Every file added, updated or deleted, by date">Activity log</button>
     <div class="power">
-      <button id="btn-power" class="btn icon" title="Restart or shut down" aria-label="Restart or shut down Rom Sync"
-              aria-haspopup="menu" aria-expanded="false" aria-controls="power-menu">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v9h-2zM6.3 6.3l1.4 1.4A6 6 0 1 0 16.3 7.7l1.4-1.4A8 8 0 1 1 6.3 6.3Z"/></svg>
+      <button id="btn-menu" class="btn icon" title="Settings, theme, restart and shut down" aria-label="Menu"
+              aria-haspopup="menu" aria-expanded="false" aria-controls="app-menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4zM4 11h16v2H4zM4 16h16v2H4z"/></svg>
       </button>
-      <div id="power-menu" class="menu" role="menu" hidden>
+      <div id="app-menu" class="menu" role="menu" hidden>
+        <button id="btn-settings" role="menuitem">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.6 4.9-.1-2.8 2-1.6-2-3.4-2.4.9-2.4-1.4L15.3 2h-3.9l-.4 2.6-2.4 1.4-2.4-.9-2 3.4 2 1.6v2.8l-2 1.6 2 3.4 2.4-.9 2.4 1.4.4 2.6h3.9l.4-2.6 2.4-1.4 2.4.9 2-3.4-2-1.6Z"/></svg>
+          <span><b>Settings</b><small>Download folder, file types, speed, schedule</small></span>
+        </button>
+        <button id="btn-theme" role="menuitem" class="theme-toggle">
+          <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>
+          <span><b id="theme-label">Light theme</b><small>Switch between dark and light</small></span>
+        </button>
+        <hr>
         <button id="btn-restart" role="menuitem">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 7.75 6h-2.1A6 6 0 1 1 12 6c1.6 0 3.1.6 4.2 1.7L13 11h7V4l-2.4 2.4A7.9 7.9 0 0 0 12 4Z"/></svg>
           <span><b>Restart</b><small>Back in a few seconds; a running sync carries on</small></span>
@@ -41,13 +52,6 @@
         </button>
       </div>
     </div>
-    <button id="btn-theme" class="btn icon theme-toggle" title="Switch between dark and light" aria-label="Switch between dark and light">
-      <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
-      <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>
-    </button>
-    <button id="btn-settings" class="btn icon" title="Settings" aria-label="Settings">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.6 4.9-.1-2.8 2-1.6-2-3.4-2.4.9-2.4-1.4L15.3 2h-3.9l-.4 2.6-2.4 1.4-2.4-.9-2 3.4 2 1.6v2.8l-2 1.6 2 3.4 2.4-.9 2.4 1.4.4 2.6h3.9l.4-2.6 2.4-1.4 2.4.9 2-3.4-2-1.6Z"/></svg>
-    </button>
   </div>
 </header>
 
@@ -161,6 +165,19 @@
     <p id="settings-error" class="error" hidden></p>
     <div class="dlg-foot"><button class="btn ghost" value="cancel">Cancel</button><button class="btn primary" id="settings-save" value="save">Save settings</button></div>
   </form>
+</dialog>
+
+<dialog id="list-dlg" class="dlg wide">
+  <form method="dialog" class="dlg-head"><h2 id="list-title">Files</h2><button class="btn icon" aria-label="Close">✕</button></form>
+  <p id="list-sub" class="muted small"></p>
+  <div class="files-wrap"><table class="files"><thead><tr><th>File</th><th>Size</th><th id="list-col3">Time</th></tr></thead><tbody id="list-body"></tbody></table></div>
+</dialog>
+
+<dialog id="changes-dlg" class="dlg wide">
+  <form method="dialog" class="dlg-head"><h2>Activity log</h2><button class="btn icon" aria-label="Close">✕</button></form>
+  <p class="muted small">Every file added, updated or deleted in the download folder, by date (kept for a year).
+    Open a day to see its files.</p>
+  <div id="changes-days" class="changes-days"></div>
 </dialog>
 
 <dialog id="cleanup-dlg" class="dlg wide">

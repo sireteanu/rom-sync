@@ -342,3 +342,33 @@ table.romm td.p { max-width: 200px; }
 .small.ok { color: var(--teal); }
 .confirm-bar[hidden], .dlg-foot[hidden], .leftover[hidden] { display: none; }
 #romm-apply { align-self: start; }
+
+/* app menu (settings, theme, restart, shut down) */
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.menu .theme-toggle svg { fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+/* Activity counters that open their file list */
+.stats .stat-link { all: unset; cursor: pointer; border-radius: 4px; padding: 1px 4px; margin: -1px -4px; }
+.stats .stat-link:hover, .stats .stat-link:focus-visible { background: var(--field); }
+.stats .stat-link:hover .muted { text-decoration: underline; text-underline-offset: 2px; }
+.stats .stat-link:focus-visible { outline: 2px solid var(--grape-ink); }
+table.files td.p { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.files td.n { white-space: nowrap; text-align: right; }
+
+/* Activity log */
+.changes-days { max-height: 65vh; overflow: auto; }
+.day { border: 1px solid var(--line); border-radius: var(--radius-s); margin-bottom: 8px; }
+.day summary { cursor: pointer; padding: 9px 12px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.day summary b { margin-right: auto; }
+.day[open] summary { border-bottom: 1px solid var(--line); }
+.day-body { padding: 6px 12px 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--ink-2); }
+.chip.ok, .kind-head.ok { color: var(--teal); }
+.chip.warn, .kind-head.warn { color: var(--amber); }
+.chip.bad, .kind-head.bad { color: var(--red); }
+.kind-head { font-size: 13px; margin: 12px 0 4px; }
+.day-body table.files, #list-dlg table.files { table-layout: fixed; width: 100%; }
+.day-body table.files th:nth-child(2), #list-dlg table.files th:nth-child(2) { width: 90px; text-align: right; }
+.day-body table.files th:nth-child(3), #list-dlg table.files th:nth-child(3) { width: 34%; }
+.day-body table.files td:nth-child(3), #list-dlg table.files td:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
