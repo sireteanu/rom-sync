@@ -224,6 +224,7 @@ class Engine:
             if kind in ("sync", "scan+sync") and not self.shutting_down:
                 self.catalog.save_settings({"interrupted_job": ""})
             self.catalog.add_history(kind, started, summary)
+            self.catalog.prune_changes()
             self.scanner = None
             self.catalog.commit()
             self.catalog.invalidate()            # final numbers show right away
@@ -282,15 +283,20 @@ class Engine:
                 st["bytes_settled"] += sizes.pop(url)
                 st["files_left"] -= 1
 
+        job_id = self.job["started"]
+
         def on_done(url, rel, word, size):
             st[word] = st.get(word, 0) + 1
             settle(url)
             self.catalog.set_local(url, word, size, None)
+            if word in ("new", "updated", "resumed"):
+                self.catalog.add_change(job_id, word, rel, size)
 
         def on_failed(url, rel, err):
             st["failed"] += 1
             settle(url)
             self.catalog.set_local(url, None, None, err)
+            self.catalog.add_change(job_id, "failed", rel, None, err)
 
         allowed = (lambda u: robots.can_fetch(USER_AGENT, u)) if robots else None
         self.downloader = dl = Downloader(cfg, client, manifest, self.gate, root=data_dir,
@@ -415,6 +421,10 @@ class Engine:
         res = await asyncio.to_thread(cleanup.delete, self.data_dir, files)
         res["skipped"] = len(wanted) - len(files)
         gone = set(res["deleted"])
+        for f in files:
+            if f["path"] in gone:
+                self.catalog.add_change(None, "deleted", f["path"], f["size"], cleanup.REASONS[f["reason"]])
+        self.catalog.commit()
         self.catalog.forget_local([f["url"] for f in files if f.get("url") and f["path"] in gone])
         log.info(cleanup.describe(res))
         await self.find_leftovers()

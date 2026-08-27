@@ -105,6 +105,11 @@ class Catalog:
             CREATE TABLE IF NOT EXISTS history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, started REAL, finished REAL,
                 summary TEXT);
+            CREATE TABLE IF NOT EXISTS changes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, t REAL, day TEXT, job REAL, kind TEXT,
+                path TEXT, size INTEGER, note TEXT);
+            CREATE INDEX IF NOT EXISTS changes_day ON changes(day);
+            CREATE INDEX IF NOT EXISTS changes_job ON changes(job, kind);
         """)
         self.db.execute("INSERT OR IGNORE INTO dirs(path, parent, name, depth) VALUES ('', NULL, '', 0)")
         self.db.commit()
@@ -440,6 +445,68 @@ class Catalog:
             rows = self.db.execute("SELECT kind, started, finished, summary FROM history "
                                    "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [{"kind": k, "started": s, "finished": f, "summary": json.loads(j)} for k, s, f, j in rows]
+
+    # ------------------------------------------------------------------ change history
+    # What happened to files in the download folder: new / updated / resumed / failed (by a sync,
+    # `job` = the sync's start time) and deleted (by Clean up). Kept for CHANGES_KEEP_DAYS.
+    CHANGES_KEEP_DAYS = 365
+
+    def add_change(self, job: Optional[float], kind: str, path: str, size: Optional[int] = None,
+                   note: Optional[str] = None, t: Optional[float] = None) -> None:
+        t = t or time.time()
+        with self.lock:
+            self.db.execute("INSERT INTO changes(t, day, job, kind, path, size, note) VALUES (?,?,?,?,?,?,?)",
+                            (t, time.strftime("%Y-%m-%d", time.localtime(t)), job, kind, path, size, note))
+
+    def prune_changes(self) -> None:
+        with self.lock:
+            self.db.execute("DELETE FROM changes WHERE t < ?", (time.time() - self.CHANGES_KEEP_DAYS * 86400,))
+            self.db.commit()
+
+    def change_days(self, limit: int = 120) -> list:
+        """[{day, counts: {kind: n}, bytes: {kind: b}}], newest day first."""
+        with self.lock:
+            days = [r[0] for r in self.db.execute(
+                "SELECT DISTINCT day FROM changes ORDER BY day DESC LIMIT ?", (limit,))]
+            out = {d: {"day": d, "counts": {}, "bytes": {}} for d in days}
+            if days:
+                q = ("SELECT day, kind, COUNT(*), SUM(COALESCE(size, 0)) FROM changes WHERE day IN (%s) "
+                     "GROUP BY day, kind" % ",".join("?" * len(days)))
+                for d, k, n, b in self.db.execute(q, days):
+                    out[d]["counts"][k] = n
+                    out[d]["bytes"][k] = b or 0
+        return [out[d] for d in days]
+
+    def changes(self, day: Optional[str] = None, job: Optional[float] = None, kind: Optional[str] = None,
+                limit: int = 2000) -> tuple:
+        """(total, [{t, kind, path, size, note}]) newest first."""
+        where, args = [], []
+        if day:
+            where.append("day=?")
+            args.append(day)
+        if job is not None:
+            where.append("job=?")
+            args.append(job)
+        if kind:
+            where.append("kind=?")
+            args.append(kind)
+        w = (" WHERE " + " AND ".join(where)) if where else ""
+        with self.lock:
+            total = self.db.execute("SELECT COUNT(*) FROM changes" + w, args).fetchone()[0]
+            rows = self.db.execute("SELECT t, kind, path, size, note FROM changes" + w +
+                                   " ORDER BY t DESC, id DESC LIMIT ?", args + [limit]).fetchall()
+        return total, [dict(zip(("t", "kind", "path", "size", "note"), r)) for r in rows]
+
+    def unchanged_since(self, since: float, limit: int = 2000) -> tuple:
+        """Files a sync found up to date (or adopted) since a time -> (total, rows)."""
+        q = " FROM files WHERE synced >= ? AND local IN ('up to date', 'already in folder')"
+        with self.lock:
+            total = self.db.execute("SELECT COUNT(*)" + q, (since,)).fetchone()[0]
+            rows = self.db.execute("SELECT synced, local, rel, bytes" + q + " ORDER BY rel COLLATE NOCASE LIMIT ?",
+                                   (since, limit)).fetchall()
+        return total, [{"t": t, "kind": "uptodate", "path": r, "size": b,
+                        "note": "already in the folder" if w == "already in folder" else None}
+                       for t, w, r, b in rows]
 
     def close(self):
         with self.lock:

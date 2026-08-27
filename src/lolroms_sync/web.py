@@ -164,6 +164,33 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
     async def history():
         return {"history": eng().catalog.history(20)}
 
+    # ---------------------------------------------------------------- what changed
+    SYNC_KINDS = ("new", "updated", "resumed", "uptodate", "failed")
+
+    @app.get("/api/sync/files")
+    async def sync_files(kind: str, limit: int = 2000):
+        """The files behind one of the Activity counters, for the current or last sync."""
+        e = eng()
+        if kind not in SYNC_KINDS:
+            raise HTTPException(400, "kind must be one of " + ", ".join(SYNC_KINDS))
+        job = e.job if e.job and e.job.get("kind") in ("sync", "scan+sync") else None
+        if job is None:
+            return {"total": 0, "files": [], "job": None}
+        if kind == "uptodate":
+            total, rows = e.catalog.unchanged_since(job["started"], limit)
+        else:
+            total, rows = e.catalog.changes(job=job["started"], kind=kind, limit=limit)
+        return {"total": total, "files": rows, "job": job["started"]}
+
+    @app.get("/api/changes/days")
+    async def change_days():
+        return {"days": eng().catalog.change_days()}
+
+    @app.get("/api/changes")
+    async def changes(day: str = "", kind: str = "", limit: int = 2000):
+        total, rows = eng().catalog.changes(day=day or None, kind=kind or None, limit=limit)
+        return {"total": total, "files": rows}
+
     # ---------------------------------------------------------------- clean up
     @app.get("/api/cleanup")
     async def cleanup_list():
