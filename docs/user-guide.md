@@ -99,9 +99,15 @@ The right-hand side shows:
   sync, a progress bar, how many files are left, the time remaining and roughly when it will finish.
   Below it: counts of new, updated, resumed, up-to-date and failed files, the speed, and how many
   downloads run in parallel.
+  **Click any of New, Updated, Resumed, Up to date or Failed** to see exactly which files they are
+  (for failed files, also why).
 - **Log** - everything that happens, newest at the bottom.
 - **Downloading** - every file being downloaded right now, with its own progress bar, percentage,
   speed and time left.
+
+**Activity log** (button at the top) shows everything that changed in your download folder, day by
+day: how many files were added, updated, deleted (by Clean up) or failed, with their sizes. Open a
+day to see the files. It goes back a year.
 
 Rom Sync finds by itself how many downloads the site allows at once, and slows down when the site
 asks it to. If the site's **daily download limit** is reached, the sync pauses ("Paused: …") and
@@ -133,7 +139,7 @@ scan or sync is running.
 
 ## 7. Settings
 
-Click the gear icon.
+Open the menu (☰, top right) and choose **Settings**.
 
 | Setting | What it does |
 |---|---|
@@ -157,13 +163,13 @@ themselves; new folders arrive too if their parent folder is ticked.
 
 ## 9. Restart, shut down and update
 
-- **Power button** (top right): **Restart** brings Rom Sync back in a few seconds; **Shut down**
+- **Menu** (☰, top right): **Restart** brings Rom Sync back in a few seconds; **Shut down**
   stops it until you start it again (Unraid: Docker tab → rom-sync → Start, or Compose Up; Windows:
   `start.bat`). A sync that was running continues when it starts again.
 - **Updating on Unraid**: Docker tab → Compose → rom-sync → **Compose Up**. It downloads the newest
   version from GitHub and rebuilds; your catalog, ticks and files stay. Check the version next to
   the title afterwards.
-- **Theme**: the sun/moon button switches between dark and light.
+- **Theme**: the menu's **Light theme** / **Dark theme** switches between them.
 
 ## 10. Show your games in RomM
 

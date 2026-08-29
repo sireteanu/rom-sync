@@ -46,7 +46,8 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 | Permissions | Downloaded files and new folders get mode **777** by default (setting). |
 | Speed | Parallel downloads ramp up until the server pushes back, settle one below, re-probe every 2 minutes and remember the limit. Optional speed cap and free-space guard. |
 | Daily limit | If lolroms starts sending its "download limit" web page instead of files, downloads pause and continue at the next sync. |
-| Progress | Activity panel (counts, speed, parallel downloads), **This sync** box (total size, files left, time remaining), **Downloading** box (one progress bar per file), live log. |
+| Progress | Activity panel (counts, speed, parallel downloads - click New, Updated, Resumed, Up to date or Failed to see those files), **This sync** box (total size, files left, time remaining), **Downloading** box (one progress bar per file), live log. |
+| Activity log | **Activity log** (header) lists every file added, updated, resumed, deleted or failed, grouped by day, kept for a year. |
 | Clean up | After each sync, lists the files in the download folder that aren't part of the sync any more (removed from the site, in folders you unticked, unneeded `.part` files). **Clean up** shows them grouped; you tick what goes and confirm before anything is deleted. |
 | Schedule | Optional automatic sync every N hours and a full site scan every N days. |
 | Reliability | A sync cut off by a restart, crash or reboot continues by itself at the next start. Power menu: **Restart** / **Shut down**. Starting a second copy just opens the running one. |
@@ -201,7 +202,13 @@ dialog opens, Rom Sync walks the download folder and judges each file against th
 ### Interface
 
 - Header: title with **version** (links to its release notes), job pill, **Scan site**, **Sync
-  selected**, **Stop**, **RomM Mapper**, power menu (**Restart**, **Shut down**), theme toggle, Settings.
+  selected**, **Stop**, **RomM Mapper**, **Activity log**, and a menu button (☰) holding **Settings**,
+  **Light/Dark theme**, **Restart** and **Shut down**.
+- The Activity counters New / Updated / Resumed / Up to date / Failed are buttons: each opens the
+  files behind it for the current or last sync (`GET /api/sync/files`). "Up to date" comes from the
+  catalog (files the sync checked without downloading); the others from the change history.
+- **Activity log**: one row per day (newest first) with counts and sizes per kind; opening a day
+  loads its files grouped by kind (`GET /api/changes/days`, `GET /api/changes?day=`).
 - Storage strip, folder tree, Activity (job line, This sync box, counters, Clean up), Log, Downloading.
 - The page polls `/api/status` every second while busy, every 4 s when idle.
 
@@ -349,7 +356,7 @@ answers like Rom Sync, a new start just opens the running copy; otherwise it exp
 
 | Where | What |
 |---|---|
-| `<config>/catalog.db` | SQLite (WAL): `dirs`, `files` (listing date/size, local state), `selection` (rules), `settings`, `scans`, `history` |
+| `<config>/catalog.db` | SQLite (WAL): `dirs`, `files` (listing date/size, local state), `selection` (rules), `settings`, `scans`, `history`, `changes` (per-file change history: time, local day, sync id = its start time, kind new/updated/resumed/failed/deleted, path, size, note; pruned after 365 days) |
 | `<config>/rom-sync.log` | Log (rotating, 2 MB × 3) |
 | `<config>/romm-mapper.json` | Backup of the RomM Mapper settings and folder choices (restored if the catalog loses them) |
 | `<data>/<site path>` | Synced files, same folder structure as the site (`Nintendo/Super Famicom/…`) |
@@ -378,6 +385,9 @@ All JSON; the page uses nothing else.
 | `GET/POST /api/settings` | Read / change settings (400 with a message on invalid values) |
 | `GET /api/history` | Last jobs |
 | `GET /api/romm` · `POST /api/romm/options` · `POST /api/romm/map {path, action}` · `POST /api/romm/links` | RomM dialog data, options, folder choices, create/update links |
+| `GET /api/sync/files?kind=` | Files behind an Activity counter for the current/last sync: `kind` = `new`, `updated`, `resumed`, `uptodate`, `failed` -> `{total, files: [{t, kind, path, size, note}], job}` (max 2000) |
+| `GET /api/changes/days` | Change history per day: `[{day, counts: {kind: n}, bytes: {kind: b}}]`, newest first |
+| `GET /api/changes?day=&kind=` | Changes (newest first, max 2000) with `total` |
 | `GET /api/cleanup` | Check the download folder now: `files` `[{path, size, reason, url?}]` (`reason` `gone`/`part`/`unticked`) and `summary` |
 | `POST /api/cleanup/delete` `{paths, confirm: true}` | Delete those leftovers -> `{deleted, bytes, errors, skipped, summary}`; 400 without `confirm`, 409 while busy |
 | `POST /api/restart` · `POST /api/shutdown` | Restart (re-execs the program) / end it |
@@ -408,7 +418,7 @@ src/lolroms_sync/            the web app
     urls.py / config.py / constants.py / util.py
 tests/          pytest against tests/mock_site.py (a local copy of lolroms' markup); never the real site
                 test_app (API, selection, settings, RomM via the app), test_engine (downloading, resume,
-                updates, dates, parallel downloads, listing parsing), test_cleanup, test_romm, test_units
+                updates, dates, parallel downloads, listing parsing), test_cleanup, test_changes, test_romm, test_units
 docker/         entrypoint.sh (PUID/PGID/UMASK), unraid-update.sh
 unraid/         docker-compose.yml (Compose Manager), lolroms-sync.xml (Docker-tab template)
 .github/workflows/  tests.yml (pytest + pyflakes on every push, Python 3.9 and 3.12),

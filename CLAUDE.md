@@ -37,7 +37,7 @@ src/lolroms_sync/            the web app
     extract.py  LinkExtractor incl. per-file date/size from the listing row
     limits.py   Limiter (page pacing), DownloadGate (auto parallel downloads), RateLimit
     urls.py / util.py / constants.py / config.py   helpers
-tests/  conftest (app_factory + API helpers), test_app, test_engine, test_cleanup, test_romm, test_units
+tests/  conftest (app_factory + API helpers), test_app, test_engine, test_cleanup, test_changes, test_romm, test_units
 docker/entrypoint.sh, Dockerfile (deps in their own layer), docker-compose.yml, unraid/, .github/workflows/
 start.bat, run.py   launchers (`run` name so it never shadows the package)
 ```
@@ -67,6 +67,11 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   `confirm: true`, refuses while busy, and re-checks so only current leftovers are removed; then
   empty folders go, `Manifest.forget()` and `Catalog.forget_local()`. Never delete anything else
   from the download folder.
+- **Change history** (`changes` table, `Catalog.add_change`): a sync records new/updated/resumed/failed
+  per file (job = the sync's start time), Clean up records deleted; pruned after 365 days. Activity
+  counters open `/api/sync/files?kind=`, the header's Activity log uses `/api/changes/days` + `?day=`.
+- Header: Scan / Sync / Stop / RomM Mapper / Activity log, then one menu (☰, `#btn-menu`) with
+  Settings, theme, Restart, Shut down.
 - Status `selection` is cached per (tree object, rules) in `Engine._selection_totals()`.
 - Status `sync` has `bytes_planned`, `bytes_left`, `files_left`, `eta` (seconds, from a ~2 min speed
   average) for the "This sync" box.

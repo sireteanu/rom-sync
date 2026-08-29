@@ -5,6 +5,18 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-29
+
+### New
+- **See the files behind each number**: in Activity, click **New**, **Updated**, **Resumed**,
+  **Up to date** or **Failed** to list those files from the current or last sync (failed ones say why).
+- **Activity log** (button at the top): every file added, updated, deleted by Clean up or failed,
+  grouped by day with counts and sizes. Open a day to see its files. Kept for a year.
+
+### Changed
+- Settings, the light/dark switch, Restart and Shut down now share one menu button (☰) at the top
+  right.
+
 ## [1.3.0] - 2026-08-24
 
 A clean-up release: Rom Sync is now only the web app, and it can tidy the download folder.
