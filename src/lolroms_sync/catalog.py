@@ -29,6 +29,7 @@ DEFAULT_SETTINGS = {
     "interrupted_job": "",          # set while a sync runs; cleared when it ends normally
     "romm": {},                     # RomM mapping options and your folder -> platform choices
     "check_remote": False,
+    "outage_wait_hours": 12,         # how long a sync waits for the site when it's down
     "sync_every_hours": 0,          # 0 = off
     "full_scan_every_days": 7,      # 0 = off (only when sync schedule is on, or on its own)
     "data_dir": "",                 # set at start-up from --data unless changed in the UI

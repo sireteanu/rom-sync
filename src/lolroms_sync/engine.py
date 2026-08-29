@@ -132,6 +132,9 @@ class Engine:
                 continue
             if k in ("parallel_max", "sync_every_hours", "full_scan_every_days"):
                 v = max(0, int(float(v or 0)))
+            if k == "outage_wait_hours":
+                v = max(0.0, float(v or 0))
+                v = int(v) if v == int(v) else v
             if k in ("interrupted_job", "romm"):
                 continue
             if k in ("refresh_before_sync", "check_remote", "resume_interrupted"):
@@ -261,7 +264,9 @@ class Engine:
         cfg = Config(start_url=self.base, download_dir=data_dir, check_remote=bool(s["check_remote"]),
                      min_free=parse_size(str(s["min_free"] or "0")), download_exts=recognised,
                      file_mode=int(parse_mode(s.get("file_mode", "")), 8) if parse_mode(s.get("file_mode", "")) else None,
-                     user_agent=USER_AGENT)
+                     user_agent=USER_AGENT, retry_wait=self.tuning.get("retry", 2.0),
+                     outage_wait=float(s.get("outage_wait_hours", 12) or 0) * 3600,
+                     outage_check=self.tuning.get("outage_check", 30.0))
         manifest = Manifest(data_dir)
         host = urlsplit(self.base).hostname or ""
         key = f"max_parallel:{host}"
@@ -347,7 +352,7 @@ class Engine:
         async def ticker():
             while True:
                 await asyncio.sleep(0.25)
-                if not dl.paused:
+                if not dl.paused and not dl.outage:
                     await self.gate.tick(queue.qsize())
                 now = time.monotonic()
                 if not self._samples or now - self._samples[-1][0] >= 1:
@@ -529,8 +534,11 @@ class Engine:
             # files in progress already have on disk (listing sizes are rounded, so it's an estimate)
             left = max(0, st["bytes_planned"] - st["bytes_settled"] - sum(h for _, (h, _t) in active))
             running = self.busy and self.job.get("phase") == "downloading"
-            eta = left / self.eta_speed if running and self.eta_speed > 0 and not dl.paused else None
+            eta = (left / self.eta_speed if running and self.eta_speed > 0 and not dl.paused and not dl.outage
+                   else None)
             out["sync"] = dict(st, bytes=dl.bytes, speed=self.speed, paused=dl.paused,
+                               outage=dict(dl.outage, gives_up=dl.outage["since"] + dl.cfg.outage_wait)
+                               if dl.outage and running else None,
                                bytes_left=left, eta=round(eta) if eta is not None else None,
                                running=g.inflight if g else 0, limit=g.limit if g else 0,
                                gate=g.describe() if g else "",
