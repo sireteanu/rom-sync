@@ -31,6 +31,9 @@ log = logging.getLogger("dircrawl")
 DONE_WORD = {NEW: "new", UPDATE: "updated", RESUME: "resumed", CHECK: "updated"}
 DONE, QUEUED = "done", "queued"     # download() results (or a float: retry after that many seconds)
 MAX_THROTTLE_RETRIES = 20          # push-back from the server doesn't use up a file's normal retries
+SITE_TRIES = 3                     # failed tries caused by the site before checking whether it's down
+OUTAGE_MAX_CHECK = 600.0           # longest wait between checks while the site is down
+SITE_STATUSES = frozenset({500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 530})
 
 # on_done(url, rel, word, size)   word: new | updated | resumed | up to date | already in folder
 DoneCallback = Callable[[str, str, str, int], None]
@@ -68,6 +71,9 @@ class Downloader:
         self.limit_streak = 0            # consecutive "web page instead of file" answers
         self.paused: Optional[str] = None
         self.stop_requested = False
+        # the site is down: {since (epoch), error, checks, next_check (epoch)}; downloads wait
+        self.outage: Optional[dict] = None
+        self._probing = False
 
     # ---- helpers ----
     def dest_of(self, rel: str) -> str:
@@ -77,6 +83,61 @@ class Downloader:
         if not self.paused:
             self.paused = reason
             log.error("Downloads paused: %s. Everything not yet downloaded stays queued.", reason)
+
+    # ---- site outages ----
+    async def site_up(self) -> bool:
+        """Does the site answer at all? (Any answer below 500 counts, including 429 and 404.)"""
+        try:
+            r = await self.client.get(self.cfg.start_url, timeout=20.0)
+            return r.status_code < 500
+        except httpx.HTTPError:
+            return False
+
+    def _enter_outage(self, err: str) -> None:
+        if self.outage:
+            return
+        now = time.time()
+        self.outage = {"since": now, "error": err, "checks": 0, "next_check": now + self.cfg.outage_check}
+        log.warning("The site isn't answering (%s). Downloads wait for it to come back instead of "
+                    "failing; checking again in %s.", err, _span(self.cfg.outage_check))
+
+    async def wait_for_site(self) -> bool:
+        """Wait while the site is down. True = it's back; False = stopped, paused or gave up (the
+        files stay queued for the next sync). One caller checks; the others just wait."""
+        while self.outage:
+            if self.paused or self.stop_requested:
+                return False
+            o = self.outage
+            now = time.time()
+            if self._probing or now < o["next_check"]:
+                await asyncio.sleep(min(1.0, max(0.05, o["next_check"] - now)))
+                continue
+            self._probing = True
+            try:
+                up = await self.site_up()
+            finally:
+                self._probing = False
+            if not self.outage:
+                break
+            o["checks"] += 1
+            if up:
+                log.info("The site is back after %s - continuing the downloads.", _span(time.time() - o["since"]))
+                self.outage = None
+                for rs in self.retry_state.values():
+                    rs["site"] = 0
+                self.limit_streak = 0
+                break
+            down_for = time.time() - o["since"]
+            if down_for >= self.cfg.outage_wait:
+                self.pause(f"the site has not answered for {_span(down_for)} ({o['error']}); "
+                           "the next sync continues where this one stopped")
+                self.outage = None
+                return False
+            wait = min(OUTAGE_MAX_CHECK, self.cfg.outage_check * 2 ** min(o["checks"], 5))
+            o["next_check"] = time.time() + wait
+            log.info("The site still isn't answering (down for %s) - next check in %s.",
+                     _span(down_for), _span(wait))
+        return not (self.paused or self.stop_requested)
 
     def plan(self, url: str, rel: str, info: FileInfo):
         """-> (action, reason). For files that need no request (SKIP / ADOPT) the manifest is
@@ -191,13 +252,16 @@ class Downloader:
         rec = man.get(rel)
         err = "unknown error"
         # survives the file being put back in the queue between tries
-        rs = self.retry_state.setdefault(url, {"throttles": 0, "html": 0, "first_html": None})
+        rs = self.retry_state.setdefault(url, {"throttles": 0, "html": 0, "first_html": None, "site": 0})
         attempts, attempt = max(cfg.retries, 3) + 1, 0
 
         while attempt < attempts:
+            if self.outage and not await self.wait_for_site():
+                return QUEUED
             if self.paused or self.stop_requested:
                 return QUEUED
             pause, pushback, slow_down, got, total = None, False, False, 0, None
+            site_trouble = False                            # failed because of the site, not the file
             have = os.path.getsize(part) if os.path.exists(part) else 0
             conditional = action == CHECK and have == 0 and os.path.exists(dest)
             headers = {}
@@ -228,6 +292,7 @@ class Downloader:
                         return DONE
                     if status in THROTTLE_STATUSES or status in RETRY_STATUSES:
                         err = f"HTTP {status}"
+                        site_trouble = status in SITE_STATUSES
                         pushback = slow_down = status in THROTTLE_STATUSES
                         pause = _retry_after(r.headers.get("retry-after"))
                         raise FetchError(err)
@@ -320,14 +385,24 @@ class Downloader:
             except httpx.TimeoutException:
                 err = "timed out"
                 pushback = slow_down = got == 0
+                site_trouble = True
             except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
                 err = f"{type(e).__name__}: {e}".rstrip(": ")
                 pushback = slow_down = got == 0             # refused / dropped before any data
+                site_trouble = True
             except httpx.TransportError as e:
                 err = f"{type(e).__name__}: {e}".rstrip(": ")
+                site_trouble = True
             finally:
                 self.active.pop(rel, None)
 
+            if site_trouble and self.cfg.outage_wait > 0:
+                rs["site"] += 1
+                if self.outage or (rs["site"] >= SITE_TRIES and not await self.site_up()):
+                    # the site itself is down: don't burn this file's retries, wait for the site
+                    self._enter_outage(err)
+                    rs["site"] = 0
+                    return 0.0                              # back in the queue, tried again once it's up
             if slow_down:
                 await self._pushback(err)
             if pushback and rs["throttles"] < MAX_THROTTLE_RETRIES:
@@ -337,7 +412,7 @@ class Downloader:
                 return float(wait)
             attempt += 1
             if attempt < attempts:
-                wait = pause if pause is not None else min(60.0, 2.0 ** attempt) * (0.75 + random.random() / 2)
+                wait = pause if pause is not None else min(60.0, cfg.retry_wait * 2.0 ** (attempt - 1)) * (0.75 + random.random() / 2)
                 kept = os.path.getsize(part) if os.path.exists(part) else 0
                 log.warning("download retry %d/%d in %.0fs (%s): %s%s", attempt, attempts - 1, wait,
                             err, rel, f" - resuming from {fmt_bytes(kept)}" if kept else "")
@@ -355,6 +430,8 @@ async def run_item(downloader: "Downloader", gate: Optional[DownloadGate], queue
         delay = not_before - time.monotonic()
         if delay > 0:
             await asyncio.sleep(delay)
+    if downloader.outage and not await downloader.wait_for_site():
+        return QUEUED                                   # site down too long, paused or stopped
     if downloader.paused or downloader.stop_requested:
         return QUEUED
     if gate:
@@ -369,3 +446,13 @@ async def run_item(downloader: "Downloader", gate: Optional[DownloadGate], queue
     if isinstance(result, float):
         queue.put_nowait((url, rel, info, action, reason, time.monotonic() + result))
     return result
+
+
+def _span(sec: float) -> str:
+    sec = int(round(sec))
+    if sec < 90:
+        return f"{sec} s"
+    m = round(sec / 60)
+    if m < 90:
+        return f"{m} min"
+    return f"{m // 60} h {m % 60} min"

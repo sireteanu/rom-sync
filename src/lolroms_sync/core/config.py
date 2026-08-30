@@ -32,5 +32,10 @@ class Config:
     check_remote: bool = False        # ask the server about every file already in the folder
     min_free: int = 2 * 1024 ** 3
     file_mode: Optional[int] = None       # e.g. 0o777: permissions for saved files and their folders
+    retry_wait: float = 2.0           # first wait between a file's retries (doubles each time, max 60 s)
+    # site outages: after 3 failed tries caused by the site (5xx, timeouts, refused connections) the
+    # site itself is checked; if it doesn't answer, downloads wait for it instead of failing
+    outage_wait: float = 12 * 3600    # give up waiting after this many seconds (0 = never wait)
+    outage_check: float = 30.0        # first re-check after this many seconds, doubling up to 10 min
     overwrite: bool = False
     verify: bool = True
