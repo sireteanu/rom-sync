@@ -17,7 +17,7 @@ from lolroms_sync.engine import Engine  # noqa: E402
 from lolroms_sync.web import create_app  # noqa: E402
 
 # fast DownloadGate timings for tests (seconds)
-TUNING = {"ramp": 0.2, "confirm": 0.5, "probe": 300}
+TUNING = {"ramp": 0.2, "confirm": 0.5, "probe": 300, "retry": 0.05, "outage_check": 0.3}
 
 
 @pytest.fixture
@@ -61,6 +61,12 @@ def app_factory(tmp_path):
     yield make
     for c in clients:
         c.__exit__(None, None, None)
+
+
+EXPECTED_ATARI = {
+    "Atari/2600/Adventure (USA).7z", "Atari/2600/Pitfall! (USA).7z", "Atari/2600/Combat_ Tank _Plus_.7z",
+    "Atari/5200/Galaxian (USA).7z", "Atari/5200/Big.7z", "Atari/800/Flux/Flux A.zip", "Atari/800/Flux/_CON.7z",
+}
 
 
 def wait(c, timeout=60):

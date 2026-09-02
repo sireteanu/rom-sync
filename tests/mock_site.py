@@ -13,9 +13,13 @@ Modes (combine with commas):
   nometa      listing rows show no date / size (like a plain index page)
   tables      render listings as an HTML table (name | date | size) instead of lolroms' div rows
   bulk        adds Atari/Bulk with 60 slow-ish files (for parallel-download tests)
+  brokenfile  adds Atari/5200/Broken.7z, which always answers 502 (the site itself is fine)
 Attributes you can change while a test runs:
   max_conc    downloads allowed at once; more get 503 + Retry-After: 1 (None = unlimited)
   daily_limit after this many completed downloads every file answers with an HTML limit page
+  down        an HTTP status (e.g. 522): the whole site answers with it, like Cloudflare when the
+              server behind it is down (None = up)
+  down_after  set `down` to 522 once this many downloads have completed (None = never)
 """
 from __future__ import annotations
 
@@ -73,6 +77,8 @@ class MockSite:
         self.files = {k: list(v) for k, v in BASE_FILES.items()}
         if "limitfile" in self.modes:
             self.files["Atari/5200"].append("Limited.7z")
+        if "brokenfile" in self.modes:
+            self.files["Atari/5200"].append("Broken.7z")
         if "bulk" in self.modes:
             self.tree["Atari"].append("Bulk")
             self.tree["Atari/Bulk"] = []
@@ -80,6 +86,8 @@ class MockSite:
         self.versions: dict = {}           # file path -> (version, date, extra bytes)
         self.max_conc = None
         self.daily_limit = None
+        self.down = None
+        self.down_after = None
         self.active = 0
         self.peak_active = 0
         self.completed = 0
@@ -117,6 +125,11 @@ class MockSite:
                     site.requests.append((self.path, dict(self.headers)))
                     site._count += 1
                     n = site._count
+                if site.down_after is not None and site.completed >= site.down_after and "file" in qs:
+                    site.down, site.down_after = 522, None
+                if site.down:
+                    return self._send(site.down, b"<html><head><title>Connection timed out</title></head>"
+                                                 b"<body>The web server is not responding.</body></html>")
                 if u.path == "/robots.txt":
                     return self._send(404, b"")
                 if "file" in qs:
@@ -137,6 +150,8 @@ class MockSite:
                                 b"</head><body>come back tomorrow</body></html>")
 
             def _file(self, f):
+                if f.endswith("Broken.7z"):
+                    return self._send(502, b"bad gateway")
                 if f.endswith("Limited.7z"):
                     return self._limit_page()
                 if site.daily_limit is not None and site.completed >= site.daily_limit:
