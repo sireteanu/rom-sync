@@ -361,11 +361,13 @@ function renderStatus(st) {
   const busy = st.busy;
   const job = st.job;
   const pill = $("#jobpill");
-  const syncing = st.sync && job && job.phase === "downloading" && busy;
-  pill.className = "pill " + (busy ? "busy" : st.sync && st.sync.paused ? "warn" : "idle");
+  const syncing = st.sync && job && job.phase === "downloading" && busy && !st.sync.outage;
+  const outage = busy && st.sync && st.sync.outage;
+  pill.className = "pill " + (outage ? "warn" : busy ? "busy" : st.sync && st.sync.paused ? "warn" : "idle");
   $("#mdot").hidden = !busy;
-  pill.textContent = busy ? (job.kind === "scan" ? "Scanning" : "Syncing") :
+  pill.textContent = outage ? "Waiting for site" : busy ? (job.kind === "scan" ? "Scanning" : "Syncing") :
     (st.sync && st.sync.paused ? "Paused" : "Idle");
+  renderOutage(outage);
   $("#btn-scan").disabled = busy;
   $("#btn-sync").disabled = busy || !st.selection.dirs;
   $("#btn-sync").title = st.selection.dirs ? "Download new, incomplete and changed files in the ticked folders"
@@ -394,7 +396,7 @@ function renderStatus(st) {
   if (job) {
     const what = { scan: "Scan", sync: "Sync", "scan+sync": "Scan and sync" }[job.kind] || job.kind;
     line.textContent = busy
-      ? `${what}: ${job.phase}${job.root ? " (" + job.root + ")" : ""} - started ${clock(job.started)}`
+      ? `${what}: ${outage ? "waiting for lolroms.com" : job.phase}${job.root ? " (" + job.root + ")" : ""} - started ${clock(job.started)}`
       : `Last ${what.toLowerCase()} ${job.phase === "done" ? "finished" : job.phase} at ${clock(job.finished || job.started)}`
         + (job.message ? `: ${job.message}` : "");
   } else line.textContent = "No job running.";
@@ -492,6 +494,19 @@ function renderDownloads(s, syncing) {
   } else { const w = box.querySelector(".dl-wait"); if (w) w.remove(); }
 }
 
+function renderOutage(o) {
+  const box = $("#outage");
+  box.hidden = !o;
+  if (!o) return;
+  const now = Date.now() / 1000;
+  const next = Math.max(0, o.next_check - now);
+  $("#outage-text").textContent =
+    `Down since ${clock(o.since)} (${o.error}). Downloads are on hold and carry on by themselves when it's ` +
+    `back; nothing is marked as failed. Next check ${next < 5 ? "now" : "in " + duration(next).replace("under a minute", "less than a minute")}. ` +
+    `If it's still down at ${new Date(o.gives_up * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}, ` +
+    `the sync pauses and the next one picks up from there.`;
+}
+
 function renderEta(st, busy) {
   const box = $("#eta-box");
   const s = st.sync;
@@ -503,6 +518,7 @@ function renderEta(st, busy) {
   const downloading = busy && st.job && st.job.phase === "downloading";
   let time;
   if (downloading && s.paused) time = "Paused";
+  else if (downloading && s.outage) time = "Waiting for site";
   else if (downloading) time = s.eta != null ? duration(s.eta) : "Estimating…";
   else time = s.files_left ? "Stopped" : "Finished";
   $("#eta-time").textContent = time;
@@ -571,6 +587,7 @@ $("#btn-settings").addEventListener("click", async () => {
   form.full_scan_every_days.value = s.full_scan_every_days;
   form.refresh_before_sync.checked = !!s.refresh_before_sync;
   form.check_remote.checked = !!s.check_remote;
+  form.outage_wait_hours.value = s.outage_wait_hours ?? 12;
   form.resume_interrupted.checked = s.resume_interrupted !== false;
   $("#settings-error").hidden = true;
   syncTypeFields();
@@ -590,6 +607,7 @@ $("#settings-save").addEventListener("click", async (e) => {
     full_scan_every_days: form.full_scan_every_days.value || 0,
     refresh_before_sync: form.refresh_before_sync.checked,
     check_remote: form.check_remote.checked,
+    outage_wait_hours: form.outage_wait_hours.value || 0,
     resume_interrupted: form.resume_interrupted.checked,
   };
   if (auto) body.parallel_max = form.parallel_n.value || 16;

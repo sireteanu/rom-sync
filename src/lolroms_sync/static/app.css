@@ -372,3 +372,9 @@ table.files td.n { white-space: nowrap; text-align: right; }
 .day-body table.files th:nth-child(2), #list-dlg table.files th:nth-child(2) { width: 90px; text-align: right; }
 .day-body table.files th:nth-child(3), #list-dlg table.files th:nth-child(3) { width: 34%; }
 .day-body table.files td:nth-child(3), #list-dlg table.files td:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* the site is down: downloads wait */
+.outage { margin: 8px 0 12px; padding: 10px 12px; border: 1px solid var(--amber); border-radius: var(--radius-s);
+  font-size: 13px; display: grid; gap: 4px; }
+.outage b { color: var(--amber); }
+.outage[hidden] { display: none; }

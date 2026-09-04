@@ -93,6 +93,10 @@
     <div class="card" id="job-card">
       <h2>Activity</h2>
       <p id="job-line" class="muted">No job running.</p>
+      <div id="outage" class="outage" role="status" hidden>
+        <b>lolroms.com isn't answering</b>
+        <span id="outage-text"></span>
+      </div>
       <div id="eta-box" class="eta" hidden>
         <div class="eta-head"><span class="muted small">This sync</span><span id="eta-total" class="small"></span></div>
         <div class="eta-main"><span class="muted small">Time remaining</span><b id="eta-time">-</b></div>
@@ -154,6 +158,8 @@
     <div class="row2">
       <label class="field"><span>File permissions</span><input name="file_mode" placeholder="Leave empty for the system default" inputmode="numeric">
         <small>For downloaded files and new folders. 777 = everyone can read and write them.</small></label>
+      <label class="field"><span>When the site is down, wait up to</span><span class="unit"><input name="outage_wait_hours" type="number" min="0" step="0.5"> hours</span>
+        <small>Downloads hold and continue when it's back. 0 = don't wait.</small></label>
     </div>
     <div class="row2">
       <label class="field"><span>Sync automatically every</span><span class="unit"><input name="sync_every_hours" type="number" min="0" step="1"> hours</span><small>0 turns it off.</small></label>
