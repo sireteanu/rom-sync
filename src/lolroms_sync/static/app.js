@@ -364,7 +364,6 @@ function renderStatus(st) {
   const syncing = st.sync && job && job.phase === "downloading" && busy && !st.sync.outage;
   const outage = busy && st.sync && st.sync.outage;
   pill.className = "pill " + (outage ? "warn" : busy ? "busy" : st.sync && st.sync.paused ? "warn" : "idle");
-  $("#mdot").hidden = !busy;
   pill.textContent = outage ? "Waiting for site" : busy ? (job.kind === "scan" ? "Scanning" : "Syncing") :
     (st.sync && st.sync.paused ? "Paused" : "Idle");
   renderOutage(outage);
@@ -1094,17 +1093,6 @@ $("#romm-copy").addEventListener("click", async () => {
   setTimeout(() => ($("#romm-copy").textContent = "Copy"), 1500);
 });
 
-/* ---------------------------------------------------------------- phone tabs */
-function showPane(pane) {
-  $("#layout").dataset.pane = pane;
-  for (const b of document.querySelectorAll(".mtabs button")) {
-    b.classList.toggle("on", b.dataset.pane === pane);
-    b.setAttribute("aria-pressed", String(b.dataset.pane === pane));
-  }
-  try { localStorage.setItem("pane", pane); } catch (e) {}
-}
-for (const b of document.querySelectorAll(".mtabs button")) b.addEventListener("click", () => { showPane(b.dataset.pane); window.scrollTo(0, 0); });
-try { const p = localStorage.getItem("pane"); if (p === "activity" || p === "browser") showPane(p); } catch (e) {}
 
 /* ---------------------------------------------------------------- theme */
 function themeLabel() {

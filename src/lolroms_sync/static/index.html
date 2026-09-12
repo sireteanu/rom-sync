@@ -70,7 +70,7 @@
   </div>
 </section>
 
-<main class="layout" id="layout" data-pane="browser">
+<main class="layout" id="layout">
   <section class="browser" aria-label="Folders">
     <div class="toolbar">
       <input id="search" type="search" placeholder="Find a folder, e.g. Game Boy" autocomplete="off" aria-label="Find a folder">
@@ -123,13 +123,6 @@
   </aside>
 </main>
 
-<!-- phones / narrow windows: switch between the folder tree and the activity side -->
-<nav class="mtabs" aria-label="Sections">
-  <button data-pane="browser" class="on">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h7l2 2h9v12H3V5Zm2 4v8h14V9H5Z"/></svg>Folders</button>
-  <button data-pane="activity">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h4l3-8 4 14 3-6h4v2h-3l-4 8-4-14-2 6H3v-2Z"/></svg>Activity<span class="mdot" id="mdot" hidden></span></button>
-</nav>
 
 <dialog id="files-dlg" class="dlg wide">
   <form method="dialog" class="dlg-head"><h2 id="files-title">Files</h2><button class="btn icon" aria-label="Close">✕</button></form>
