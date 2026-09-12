@@ -109,6 +109,14 @@ The right-hand side shows:
 day: how many files were added, updated, deleted (by Clean up) or failed, with their sizes. Open a
 day to see the files. It goes back a year.
 
+**If lolroms.com goes down** in the middle of a sync, Rom Sync notices (a file fails three times and
+the site itself doesn't answer) and waits instead of marking everything as failed. The pill at the
+top says *Waiting for site* and the Activity panel says since when, and when it checks next. When the
+site is back, downloads carry on by themselves where they stopped. If it stays down longer than the
+setting *When the site is down, wait up to* (12 hours by default), the sync pauses and the next sync
+picks up from there. A single file that keeps failing while the site works is still reported as
+failed after three tries.
+
 Rom Sync finds by itself how many downloads the site allows at once, and slows down when the site
 asks it to. If the site's **daily download limit** is reached, the sync pauses ("Paused: …") and
 the rest is downloaded at the next sync.
@@ -148,6 +156,7 @@ Open the menu (☰, top right) and choose **Settings**.
 | Parallel downloads | *As many as the server allows* (recommended, with an upper limit) or a fixed number |
 | Speed limit | e.g. `10M` for 10 MB/s; empty = unlimited |
 | Keep free on disk | Downloads pause before free space drops below this (default 2G) |
+| When the site is down, wait up to … hours | How long a sync waits for lolroms.com to come back before pausing (default 12; 0 = don't wait) |
 | File permissions | For downloaded files and new folders; default 777; empty = system default |
 | Sync automatically every … hours | 0 = off |
 | Full site scan every … days | Picks up new folders (used with the automatic sync) |

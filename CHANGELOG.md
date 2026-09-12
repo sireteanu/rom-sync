@@ -5,6 +5,18 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-09-12
+
+### Improved
+- **The site going down no longer fails your sync.** When a file fails three times and lolroms.com
+  itself isn't answering (Cloudflare errors, timeouts, refused connections), Rom Sync waits for the
+  site instead of marking files as failed. The pill shows *Waiting for site*, the Activity panel
+  says since when and when it checks next (every 30 seconds at first, up to every 10 minutes), and
+  downloads carry on by themselves - resuming half-finished files - when it's back.
+- New setting **When the site is down, wait up to … hours** (default 12). After that the sync
+  pauses with nothing marked as failed, and the next sync continues.
+- A single file that keeps failing while the site works is still reported as failed after three tries.
+
 ## [1.3.1] - 2026-08-29
 
 ### New

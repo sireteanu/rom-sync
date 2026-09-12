@@ -45,6 +45,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 | Dates | Each saved file gets the date the website lists for it (12:00 local time). After a sync, each folder gets the date of its newest file. |
 | Permissions | Downloaded files and new folders get mode **777** by default (setting). |
 | Speed | Parallel downloads ramp up until the server pushes back, settle one below, re-probe every 2 minutes and remember the limit. Optional speed cap and free-space guard. |
+| Site outages | When lolroms itself stops answering (5xx/Cloudflare 52x, timeouts, refused connections), a file that has failed 3 times because of it triggers a check of the site; if the site is down, downloads **wait** for it (re-checking every 30 s, doubling to every 10 min) instead of failing, and carry on when it's back. After "When the site is down, wait up to" (default 12 h) the sync pauses; the next sync continues. |
 | Daily limit | If lolroms starts sending its "download limit" web page instead of files, downloads pause and continue at the next sync. |
 | Progress | Activity panel (counts, speed, parallel downloads - click New, Updated, Resumed, Up to date or Failed to see those files), **This sync** box (total size, files left, time remaining), **Downloading** box (one progress bar per file), live log. |
 | Activity log | **Activity log** (header) lists every file added, updated, resumed, deleted or failed, grouped by day, kept for a year. |
@@ -168,6 +169,16 @@ downloaded before:
   below; a level that worked before needs two push-backs within 10 s to be lowered; every 2 minutes
   it tries one more. Pushed-back files go back in the queue without using their retries. Setting
   "Fixed number" disables this.
+- **Site outages** (`Downloader.wait_for_site`): errors caused by the site (HTTP 500/502/503/504/52x,
+  timeouts, refused or dropped connections) count per file; after 3 of them the downloader asks the
+  site root (`site_up()`: any answer below 500 = up). If it answers, the file keeps its normal retries
+  and fails after them as before (the problem is that file). If not, the sync enters **outage**:
+  the file goes back in the queue without using its retries, every worker waits (one checks, the
+  others wait; no download slots are held, the parallel-downloads ramp is frozen), checks at 30 s,
+  then doubling to every 10 min. When the site answers, downloads continue (`.part` files resume).
+  After `outage_wait_hours` (default 12; 0 = never wait) the sync pauses with nothing marked
+  failed. Status `sync.outage` = `{since, error, checks, next_check, gives_up}`; the page shows a
+  notice and the pill "Waiting for site".
 - **Daily limit**: when the site answers with an HTML page instead of a file while nothing else is
   downloading, downloads pause ("Paused: …") and stay queued for the next sync.
 - **Free space**: downloads pause before the disk would drop below "Keep free on disk".
@@ -326,6 +337,7 @@ Stored in the catalog (`settings` table); changed in the Settings dialog or `POS
 | `refresh_before_sync` | `true` | Re-read the ticked folders' listings before each sync |
 | `resume_interrupted` | `true` | Continue an unfinished sync when the app starts |
 | `check_remote` | `false` | Ask the server about every existing file (exact, one request per file) |
+| `outage_wait_hours` | `12` | How long a sync waits for the site when it's down before pausing (0 = don't wait; files then fail after their retries) |
 | `romm` | `{}` | RomM Mapper: `romm_folder`, `only_synced`, `variants`, `layout` (`category`/`folders`), `links_dir`, `keep_links`, `map` (your folder choices). Older `method`/`host_path`/`library` keys are converted or dropped. Mirrored to `<config>/romm-mapper.json` |
 | `interrupted_job` | `""` | Internal: set while a sync runs |
 
@@ -418,7 +430,7 @@ src/lolroms_sync/            the web app
     urls.py / config.py / constants.py / util.py
 tests/          pytest against tests/mock_site.py (a local copy of lolroms' markup); never the real site
                 test_app (API, selection, settings, RomM via the app), test_engine (downloading, resume,
-                updates, dates, parallel downloads, listing parsing), test_cleanup, test_changes, test_romm, test_units
+                updates, dates, parallel downloads, listing parsing), test_cleanup, test_changes, test_outage, test_romm, test_units
 docker/         entrypoint.sh (PUID/PGID/UMASK), unraid-update.sh
 unraid/         docker-compose.yml (Compose Manager), lolroms-sync.xml (Docker-tab template)
 .github/workflows/  tests.yml (pytest + pyflakes on every push, Python 3.9 and 3.12),

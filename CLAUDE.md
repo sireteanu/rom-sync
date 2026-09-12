@@ -37,7 +37,7 @@ src/lolroms_sync/            the web app
     extract.py  LinkExtractor incl. per-file date/size from the listing row
     limits.py   Limiter (page pacing), DownloadGate (auto parallel downloads), RateLimit
     urls.py / util.py / constants.py / config.py   helpers
-tests/  conftest (app_factory + API helpers), test_app, test_engine, test_cleanup, test_changes, test_romm, test_units
+tests/  conftest (app_factory + API helpers), test_app, test_engine, test_cleanup, test_changes, test_outage, test_romm, test_units
 docker/entrypoint.sh, Dockerfile (deps in their own layer), docker-compose.yml, unraid/, .github/workflows/
 start.bat, run.py   launchers (`run` name so it never shadows the package)
 ```
@@ -140,6 +140,12 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
    lowered; the limit is stored per host in the manifest (`max_parallel:<host>`). Push-back retries
    don't use up a file's normal retries. Repeated HTML pages with no successes -> downloads pause
    (daily limit) and stay queued for the next sync.
+5c. **Site outages**: site-caused errors (5xx/52x, timeouts, connect/protocol errors) count per file;
+   after 3, `site_up()` checks the start URL. Down -> `Downloader.outage`, the file is re-queued without
+   using its retries and every worker waits in `wait_for_site()` (one probes; 30 s doubling to 10 min;
+   gate ramp frozen); gives up after `outage_wait_hours` with `pause()` - never mark files failed
+   because the site is down. Up -> the file fails after its normal retries as before.
+   Mock: `site.down` / `down_after`, mode `brokenfile`; tests in test_outage.py.
 6. **State**: a file is only final once renamed from `.part` and recorded in the manifest, so a stop,
    crash or restart at any point is safe; the next sync resumes (`interrupted_job`).
 7. **Politeness**: `Limiter` halves parallelism and doubles the delay on 429/503/timeouts/slow
