@@ -1,2 +1,2 @@
 """lolroms-sync: browse the whole lolroms.com catalog and keep the folders you pick in sync."""
-__version__ = "1.3.2"
+__version__ = "1.3.3"
