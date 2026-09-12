@@ -53,7 +53,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 | Schedule | Optional automatic sync every N hours and a full site scan every N days. |
 | Reliability | A sync cut off by a restart, crash or reboot continues by itself at the next start. Power menu: **Restart** / **Shut down**. Starting a second copy just opens the running one. |
 | RomM | **RomM Mapper** maps every folder to a RomM platform (built-in rules, editable per folder from a dropdown, including "exclude"). Keeps one folder link per platform next to the downloads (so RomM needs one folder mapping) and generates RomM's `config.yml`. Choices are saved instantly and backed up next to the catalog. |
-| Interface | Dark (default) or light theme, works on a phone (Folders / Activity tabs at the bottom), optional password (HTTP Basic), no external resources (works on a LAN without internet for the page itself). |
+| Interface | Dark (default) or light theme, works on a phone (Activity, Log and Downloading sit under the folder tree), optional password (HTTP Basic), no external resources (works on a LAN without internet for the page itself). |
 
 ---
 

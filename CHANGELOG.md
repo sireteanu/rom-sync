@@ -5,6 +5,13 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-09-12
+
+### Changed
+- **Phones**: the Folders / Activity tabs are gone. Activity, Log and Downloading now sit under the
+  folder tree - scroll down to see them. The tree keeps to about two thirds of the screen so they're
+  always a short scroll away.
+
 ## [1.3.2] - 2026-09-12
 
 ### Improved

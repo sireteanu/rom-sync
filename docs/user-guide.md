@@ -90,8 +90,7 @@ manager to see what's new; folders get the date of their newest file. Files get 
 
 ## 5. Watching progress
 
-On a phone, use the **Folders** / **Activity** tabs at the bottom of the screen to switch between the
-folder tree and the activity side (a dot on Activity means something is running).
+On a phone, the Activity, Log and Downloading panels are under the folder tree - scroll down to see them.
 
 The right-hand side shows:
 
