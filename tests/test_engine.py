@@ -361,3 +361,17 @@ def test_scan_survives_rate_limiting(site_factory, app_factory):
     scan(c, "Atari")
     assert set(listed(c, "Atari/2600")) == {"Adventure (USA).7z", "Pitfall! (USA).7z", "Combat_ Tank _Plus_.7z"}
     assert listed(c, "Atari/800/Flux")
+
+
+def test_a_sync_with_nothing_to_do_writes_nothing_to_the_disk(site, app_factory, monkeypatch):
+    """Files that are up to date, correctly dated and already have the permissions setting are
+    only looked at (one lookup each) - no permission or date changes, which are slow on shares."""
+    c = app_factory(site, settings={"file_mode": "777"})
+    atari(c)
+    writes = []
+    real_chmod, real_utime = os.chmod, os.utime
+    monkeypatch.setattr(os, "chmod", lambda *a, **k: (writes.append(("chmod", a[0])), real_chmod(*a, **k))[1])
+    monkeypatch.setattr(os, "utime", lambda *a, **k: (writes.append(("utime", a[0])), real_utime(*a, **k))[1])
+    st = sync(c)
+    assert st["sync"]["up to date"] == 7
+    assert [w for w in writes if str(w[1]).endswith((".7z", ".zip"))] == []

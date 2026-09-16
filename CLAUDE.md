@@ -72,6 +72,10 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   counters open `/api/sync/files?kind=`, the header's Activity log uses `/api/changes/days` + `?day=`.
 - Header: Scan / Sync / Stop / RomM Mapper / Activity log, then one menu (☰, `#btn-menu`) with
   Settings, theme, Restart, Shut down.
+- Slow disk work stays off the event loop: sync planning (`plan_all()` via `asyncio.to_thread`;
+  Manifest uses `check_same_thread=False`, safe because downloads start only after planning) and the
+  Clean up check. Planning stats each file once and passes `st` on; never chmod/utime a file whose
+  mode/date already match (shares like Unraid's array make each call slow).
 - Status `selection` is cached per (tree object, rules) in `Engine._selection_totals()`.
 - Status `sync` has `bytes_planned`, `bytes_left`, `files_left`, `eta` (seconds, from a ~2 min speed
   average) for the "This sync" box.

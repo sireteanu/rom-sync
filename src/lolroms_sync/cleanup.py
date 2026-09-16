@@ -73,7 +73,16 @@ def find(catalog, types, disk: list) -> list:
     by_disk = {sanitized(p): p for p in tree}            # folder on disk -> catalog folder
     listed = catalog.files_by_rel({by_disk[d] for d, _, _ in disk if d in by_disk})
 
+    # both answers depend only on the folder, so work them out once per folder, not once per file
+    readable_cache: dict = {}
+    ticked_cache: dict = {}
+
     def readable(disk_dir: str) -> bool:
+        if disk_dir not in readable_cache:
+            readable_cache[disk_dir] = _readable(disk_dir)
+        return readable_cache[disk_dir]
+
+    def _readable(disk_dir: str) -> bool:
         """Can we tell that a file in this folder isn't on the site? Its nearest known folder must
         have been read without errors (for the site root: a finished full scan)."""
         d = disk_dir
@@ -95,7 +104,9 @@ def find(catalog, types, disk: list) -> list:
         if hit is None:
             return None
         _url, d, ext = hit
-        return bool(catalog.effective_files(d, rules)) and (types is None or ext in types)
+        if d not in ticked_cache:
+            ticked_cache[d] = bool(catalog.effective_files(d, rules))
+        return ticked_cache[d] and (types is None or ext in types)
 
     out = []
     for d, name, size in disk:

@@ -143,14 +143,18 @@ class Downloader:
         """-> (action, reason). For files that need no request (SKIP / ADOPT) the manifest is
         updated and on_done is called here, and action is returned as None."""
         dest = self.dest_of(rel)
-        action, reason = plan(dest, self.manifest.get(rel), info,
-                              check_remote=self.cfg.check_remote, overwrite=self.cfg.overwrite)
+        try:
+            st = os.stat(dest)                 # asked once and reused below (slow on network shares)
+        except FileNotFoundError:
+            st = None
+        rec = self.manifest.get(rel)
+        action, reason = plan(dest, rec, info, check_remote=self.cfg.check_remote,
+                              overwrite=self.cfg.overwrite, st=st)
         if action in FETCH_ACTIONS:
             return action, reason
-        size = os.path.getsize(dest)
-        rec = self.manifest.get(rel)
-        stamp_file(dest, info, rec.last_modified if rec else None)   # fix dates of files we already have
-        self._set_mode(dest)
+        size = st.st_size
+        stamp_file(dest, info, rec.last_modified if rec else None, st=st)   # fix dates of files we have
+        self._set_mode(dest, st)
         if action == ADOPT:
             self.manifest.done(rel, url, size, None, None, info)
             self.on_done(url, rel, "already in folder", size)
@@ -202,12 +206,15 @@ class Downloader:
             self.retry_state.pop(url, None)
         return result
 
-    def _set_mode(self, path: str) -> None:
+    def _set_mode(self, path: str, st=None) -> None:
         """Apply cfg.file_mode (e.g. 0o777) to a saved file and remember its folder for
         stamp_folders(). Best effort: a share or a Windows drive may not support it, and that must
-        never fail a download."""
+        never fail a download. With `st` (a current os.stat), files that already have it are left
+        alone - no write to the disk."""
         self.touched_dirs.add(os.path.dirname(path))
         if self.cfg.file_mode is None:
+            return
+        if st is not None and (st.st_mode & 0o7777) == self.cfg.file_mode:
             return
         try:
             os.chmod(path, self.cfg.file_mode)

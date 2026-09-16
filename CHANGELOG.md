@@ -5,6 +5,17 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-09-15
+
+### Improved
+- **Faster start of a sync, and the page stays responsive meanwhile.** Before downloading, a sync
+  checks every selected file on disk. That now takes 2 disk lookups per file instead of 6, and
+  files that already have the right permissions and date aren't touched at all - which matters
+  most on an Unraid array or a network share. The check also runs in the background, so the web
+  page no longer freezes for a few seconds at the start of a sync of a large selection.
+- **Clean up** checks the download folder in the background too, so the page doesn't pause after
+  each sync or when you open Clean up.
+
 ## [1.3.3] - 2026-09-12
 
 ### Changed

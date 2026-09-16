@@ -311,21 +311,30 @@ class Engine:
         claimed = [0]                            # taken from the queue, not finished yet
         dl.pending = lambda: queue.qsize() + claimed[0]
         sizes = {}
-        for url, rel, d, ext, date, size in files:
-            if self.stop_requested:
-                break
-            info = FileInfo(ext, date, size)
-            action, reason = dl.plan(url, rel, info)
-            st["planned"] += 1
-            if action:
-                queue.put_nowait((url, rel, info, action, reason))
-                st["to_fetch"] += 1
-                st["files_left"] += 1
-                rng = size_range(size) if size else None
-                sizes[url] = (rng[0] + rng[1]) // 2 if rng else 0
-                st["bytes_planned"] += sizes[url]
-            if st["planned"] % 2000 == 0:
-                await asyncio.sleep(0)               # keep the web interface responsive
+
+        def plan_all() -> list:
+            """Compare every selected file with the disk. Runs in a worker thread: on a network
+            share or an array this is thousands of disk lookups, and the web page must stay
+            responsive meanwhile. Nothing downloads yet, so nothing else uses the manifest."""
+            todo = []
+            for url, rel, d, ext, date, size in files:
+                if self.stop_requested:
+                    break
+                info = FileInfo(ext, date, size)
+                action, reason = dl.plan(url, rel, info)
+                st["planned"] += 1
+                if action:
+                    todo.append((url, rel, info, action, reason))
+                    st["to_fetch"] += 1
+                    st["files_left"] += 1
+                    rng = size_range(size) if size else None
+                    sizes[url] = (rng[0] + rng[1]) // 2 if rng else 0
+                    st["bytes_planned"] += sizes[url]
+            return todo
+
+        for item in await asyncio.to_thread(plan_all):
+            queue.put_nowait(item)
+        manifest.commit()
         self.catalog.commit()
         log.info("Sync: %d files in the selection, %d to download (about %s), %d already up to date",
                  st["total"], st["to_fetch"], fmt_bytes(st["bytes_planned"]),
@@ -402,9 +411,11 @@ class Engine:
         """Files in the download folder that aren't part of the sync (see cleanup.py)."""
         from . import cleanup
         s = self.catalog.settings()
-        disk = await asyncio.to_thread(cleanup.walk, s["data_dir"])
         self.catalog.commit()
-        files = cleanup.find(self.catalog, parse_types(s["types"]), disk)
+        types = parse_types(s["types"])
+        # walking the folder and judging tens of thousands of files takes a moment: do it in a
+        # worker thread so the web page stays responsive (the catalog is safe to read from there)
+        files = await asyncio.to_thread(lambda: cleanup.find(self.catalog, types, cleanup.walk(s["data_dir"])))
         self.leftovers = dict(cleanup.summary(files), checked=time.time())
         return files
 

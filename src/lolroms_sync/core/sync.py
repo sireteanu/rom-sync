@@ -118,13 +118,14 @@ def site_timestamp(info: "FileInfo", last_modified: Optional[str] = None) -> Opt
     return time.mktime(time.strptime(day + " 12:00", "%Y-%m-%d %H:%M"))
 
 
-def stamp_file(path: str, info: "FileInfo", last_modified: Optional[str] = None) -> bool:
-    """Set the file's modified date to the website's date. True if it was changed."""
+def stamp_file(path: str, info: "FileInfo", last_modified: Optional[str] = None, st=None) -> bool:
+    """Set the file's modified date to the website's date. True if it was changed.
+    `st`: a current os.stat of the file, if the caller has one (saves asking the disk again)."""
     stamp = site_timestamp(info, last_modified)
     if stamp is None:
         return False
     try:
-        if abs(os.stat(path).st_mtime - stamp) < 2:
+        if abs((st or os.stat(path)).st_mtime - stamp) < 2:
             return False
         os.utime(path, (stamp, stamp))
         return True
@@ -200,7 +201,9 @@ class Manifest:
 
     def __init__(self, folder: str):
         self.path = os.path.join(folder, MANIFEST_NAME)
-        self.db = sqlite3.connect(self.path)
+        # check_same_thread off: a sync plans its files in a worker thread before any download
+        # starts (never both at once)
+        self.db = sqlite3.connect(self.path, check_same_thread=False)
         self.db.executescript("""
             PRAGMA journal_mode=WAL;
             PRAGMA synchronous=NORMAL;
@@ -265,16 +268,21 @@ class Manifest:
 
 # --------------------------------------------------------------------------- decisions
 def plan(dest: str, rec: Optional[Record], info: FileInfo, *, check_remote: bool = False,
-         overwrite: bool = False) -> tuple:
-    """Decide what to do with one listed file -> (action, reason)."""
+         overwrite: bool = False, st=...) -> tuple:
+    """Decide what to do with one listed file -> (action, reason). `st`: os.stat(dest) if the
+    caller already has it (None = the file doesn't exist), so the disk is asked only once."""
     part = dest + ".part"
     if overwrite:
         return UPDATE, "download again requested"
     if os.path.exists(part):
         return RESUME, "unfinished download"
-    if not os.path.exists(dest):
+    if st is ...:
+        try:
+            st = os.stat(dest)
+        except FileNotFoundError:
+            st = None
+    if st is None:
         return NEW, "new" if rec is None else "missing from the folder"
-    st = os.stat(dest)
     size = st.st_size
 
     if rec is not None:                                  # we downloaded it before

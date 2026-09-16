@@ -156,6 +156,10 @@ downloaded before:
 | Matches | **Skip**, no request |
 | Present but not in the manifest (copied in by hand) | **Adopt** if its size fits the listing, otherwise resume/update |
 
+- Planning runs in a worker thread (`plan_all()` in `Engine._sync`; the manifest's SQLite connection
+  allows it because no download runs yet) and asks the disk once per file (`os.stat`, passed to
+  `sync.plan()`, `stamp_file()` and `_set_mode()`); permissions and dates are only written when they
+  differ. The Clean up check (`walk` + `find`) also runs in a worker thread.
 - Files are written as `<name>.part` and renamed when complete. A web page received instead of a
   file is rejected, and archive headers are checked (7z/zip/rar…).
 - **Dates**: lolroms sends no `Last-Modified` header, so the listing date is the only date; files
