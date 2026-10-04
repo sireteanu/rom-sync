@@ -203,4 +203,5 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
 ## Privacy
 - Never put the owner's real server paths, share names, drive letters, time zone, IP addresses,
   user names or keys into the repository (code, docs, tests, changelog, commit messages). Use
-  generic examples: `/path/to/roms`, `/path/to/appdata/rom-sync`, `D:\Roms`, `America/New_York`.
+  placeholder paths in docs and examples: `/path/to/roms`, `/path/to/appdata/rom-sync`,
+  `D:\path\to\roms`, `America/New_York` (no real-looking server paths).

@@ -107,7 +107,7 @@ when started by hand).
 1. Install Python 3.9+ (tick "Add python.exe to PATH").
 2. Double-click **`start.bat`**. The first start creates `.venv` and installs the dependencies; the
    browser then opens `http://localhost:8484/`.
-3. Set the download folder in Settings, or start with `start.bat --data D:\Roms`.
+3. Set the download folder in Settings, or start with `start.bat --data D:\path\to\roms`.
 
 Catalog and settings live in `config\` next to `start.bat`; the log is `config\rom-sync.log`.
 `run.py` is an alternative launcher that keeps its window open on errors.
