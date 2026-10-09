@@ -27,7 +27,6 @@ DEFAULT_SETTINGS = {
     "refresh_before_sync": True,    # re-read the selected folders' listings before syncing
     "resume_interrupted": True,     # restart a sync that was cut off (crash, reboot, restart)
     "interrupted_job": "",          # set while a sync runs; cleared when it ends normally
-    "romm": {},                     # RomM mapping options and your folder -> platform choices
     "check_remote": False,
     "outage_wait_hours": 12,         # how long a sync waits for the site when it's down
     "sync_every_hours": 0,          # 0 = off

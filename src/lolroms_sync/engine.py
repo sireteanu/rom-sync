@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import importlib.util
 import logging
 import os
@@ -86,7 +87,7 @@ class Engine:
         self.logbuf = LogBuffer()
         log.addHandler(self.logbuf)
         log.setLevel(logging.DEBUG)
-        self._restore_romm_backup()           # after the log is set up, so it shows in the page
+        self._keep_romm_settings()            # after the log is set up, so it shows in the page
         self.job: Optional[dict] = None
         self.task: Optional[asyncio.Task] = None
         self.scanner: Optional[Scanner] = None
@@ -103,19 +104,22 @@ class Engine:
         self.shutting_down = False
         self.leftovers: Optional[dict] = None   # Clean up summary from the last check
 
-    def _restore_romm_backup(self) -> None:
-        """RomM Mapper choices live in the catalog and in <config>/romm-mapper.json. If the catalog
-        lost them (reset or replaced), bring them back from the file; otherwise refresh the file."""
-        from . import romm
+    def _keep_romm_settings(self) -> None:
+        """The RomM Mapper moved to ROM Mapper (1.3.5). Choices made here are left in
+        <config>/romm-mapper.json - written once from the catalog if that file is missing - so
+        they can be copied over. Nothing else reads them any more."""
         cur = self.catalog.settings().get("romm") or {}
-        if cur:
-            romm.write_backup(self.config_dir, cur)
+        path = os.path.join(self.config_dir, "romm-mapper.json")
+        if not cur or os.path.exists(path):
             return
-        saved = romm.read_backup(self.config_dir)
-        if saved:
-            self.catalog.save_settings({"romm": saved})
-            log.info("Restored the RomM Mapper settings (%d folder choices) from %s",
-                     len(saved.get("map") or {}), romm.BACKUP_FILE)
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cur, f, ensure_ascii=False, indent=1, sort_keys=True)
+            os.replace(tmp, path)
+            log.info("Your RomM Mapper choices are in %s - copy that file to ROM Mapper to keep them", path)
+        except OSError:
+            pass
 
     # ------------------------------------------------------------------ settings
     @property
@@ -135,7 +139,7 @@ class Engine:
             if k == "outage_wait_hours":
                 v = max(0.0, float(v or 0))
                 v = int(v) if v == int(v) else v
-            if k in ("interrupted_job", "romm"):
+            if k in ("interrupted_job",):
                 continue
             if k in ("refresh_before_sync", "check_remote", "resume_interrupted"):
                 v = bool(v)
@@ -386,7 +390,6 @@ class Engine:
                 n = await asyncio.to_thread(stamp_folders, list(dl.touched_dirs), data_dir)
                 if n:
                     log.info("Dated %d folders to their newest file", n)
-            await self._update_romm_links()
             if not self.stop_requested and not dl.paused:
                 await self._check_leftovers()
             best = self.gate.remembered_max()
@@ -456,21 +459,6 @@ class Engine:
         last = next((h for h in self.catalog.history(50) if h["kind"] in ("sync", "scan+sync")), None)
         base = last["finished"] if last and last.get("finished") else time.time()
         self.next_run = max(base + hours * 3600, time.time() + 60)
-
-    async def _update_romm_links(self) -> None:
-        """RomM Mapper: keep the platform folder links in step with what's synced (once set up)."""
-        from . import romm
-        s = self.catalog.settings()
-        opt = romm.options_from(s)
-        if not opt.get("keep_links"):
-            return
-        try:
-            m = romm.Mapping(romm.folders_from_catalog(self.catalog, parse_types(s["types"])), opt, s["data_dir"])
-            res = await asyncio.to_thread(romm.apply_links, m)
-            if res["created"] or res["updated"] or res["removed"] or res["errors"] or res["skipped"]:
-                log.info(romm.describe_links(res))
-        except Exception as e:  # never let RomM housekeeping fail a sync
-            log.warning("Could not update the RomM platform links: %s", e)
 
     def resume_interrupted(self) -> bool:
         s = self.catalog.settings()
