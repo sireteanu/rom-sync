@@ -13,7 +13,6 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import romm
 from .catalog import OWN
 from .engine import Engine, parse_types
 
@@ -207,83 +206,6 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
             raise HTTPException(409, "wait until the scan or sync has finished, then try again")
         res = await e.delete_leftovers([str(p) for p in paths])
         return dict(res, summary=e.leftovers)
-
-    # ---------------------------------------------------------------- RomM mapping
-    def romm_view(e: Engine) -> dict:
-        s = e.catalog.settings()
-        opt = romm.options_from(s)
-        m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])), opt, s["data_dir"])
-        return {"options": {**{k: opt[k] for k in ("only_synced", "variants", "layout", "links_dir",
-                                                 "keep_links")}, "romm_folder": m.romm_folder()},
-                "links": {"dir": m.links_dir, "download_dir": m.data_dir, "inside": m.data_in_links(),
-                          "targets": m.link_targets()},
-                "rows": m.rows(), "platforms": m.platforms, "firmware": m.firmware,
-                "warnings": m.warnings(), "summary": m.summary(), "slugs": [{"slug": k, "name": v[0], "family": v[1], "kind": v[2]}
-                          for k, v in sorted(romm.PLATFORMS.items())],
-                "outputs": {"compose": m.compose(), "config": m.config_yml()}}
-
-    def save_romm(e: Engine, cur: dict) -> None:
-        """Save RomM Mapper choices in the catalog, plus a backup file next to it that is restored
-        if the catalog is ever reset or replaced."""
-        e.catalog.save_settings({"romm": cur})
-        romm.write_backup(e.config_dir, cur)
-
-    @app.get("/api/romm")
-    async def romm_get():
-        return romm_view(eng())
-
-    @app.post("/api/romm/options")
-    async def romm_options(values: dict = Body(...)):
-        e = eng()
-        cur = dict(e.catalog.settings().get("romm") or {})
-        for k in ("romm_folder", "links_dir"):
-            if k in values:
-                cur[k] = str(values[k] or "").strip()
-        for k in ("only_synced", "variants", "keep_links"):
-            if k in values:
-                cur[k] = bool(values[k])
-        if values.get("layout") in ("category", "folders"):
-            cur["layout"] = values["layout"]
-        for old in ("host_path", "library", "method"):     # settings from before 1.3.0
-            if old == "method" and cur.get(old) == "links":
-                cur.setdefault("keep_links", True)
-            cur.pop(old, None)
-        save_romm(e, cur)
-        return romm_view(e)
-
-    @app.post("/api/romm/map")
-    async def romm_map(path: str = Body(...), action: str = Body("")):
-        e = eng()
-        try:
-            action = romm.check_action(action)
-        except ValueError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        cur = dict(e.catalog.settings().get("romm") or {})
-        mapping = dict(cur.get("map") or {})
-        if action:
-            mapping[path] = action
-        else:
-            mapping.pop(path, None)
-        cur["map"] = mapping
-        save_romm(e, cur)
-        return romm_view(e)
-
-    @app.post("/api/romm/links")
-    async def romm_links():
-        e = eng()
-        s = e.catalog.settings()
-        m = romm.Mapping(romm.folders_from_catalog(e.catalog, parse_types(s["types"])),
-                         romm.options_from(s), s["data_dir"])
-        res = await asyncio.to_thread(romm.apply_links, m)
-        log.info(romm.describe_links(res))
-        if m.data_in_links() is not None:                 # from now on, kept up to date after each sync
-            cur = dict(s.get("romm") or {})
-            if not cur.get("keep_links"):
-                cur["keep_links"] = True
-                save_romm(e, cur)
-        view = romm_view(e)
-        view["applied"] = dict(res, text=romm.describe_links(res))
-        return view
 
     # ---------------------------------------------------------------- restart
     @app.post("/api/restart")
