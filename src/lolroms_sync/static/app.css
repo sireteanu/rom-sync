@@ -227,44 +227,12 @@ table.files td:nth-child(2), table.files td:nth-child(3) { white-space: nowrap; 
 .bar.thin { height: 8px; background-image: none; }
 #eta-sub { margin-top: 6px; }
 
-/* ---------- RomM dialog ---------- */
-.dlg.xwide { width: min(1240px, 97vw); }
 .dlg code { font-size: 12px; background: var(--field); padding: 1px 4px; border-radius: 3px; }
-.warnings { margin: 8px 0; padding-left: 18px; font-size: 12.5px; color: var(--amber, #d9a441); }
-.warnings:empty { display: none; }
-.romm-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; margin-top: 8px; }
-@media (max-width: 900px) { .romm-grid { grid-template-columns: 1fr; } }
-.romm-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-.romm-bar h3 { font-size: 13.5px; margin: 0 auto 0 0; }
-.romm-bar select, .romm-bar input, table.romm input {
-  font: 13px var(--font); padding: 5px 8px; border-radius: var(--radius-s);
-  border: 1px solid var(--line); background: var(--field); color: var(--ink);
-}
-.romm-bar input { width: 140px; }
-.romm-wrap { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-s); }
-table.romm td.p { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-table.romm td.n { text-align: right; }
-table.romm input { width: 120px; }
-table.romm input::placeholder { color: var(--ink-2); opacity: .8; }
-table.romm td.res { white-space: nowrap; font-size: 12.5px; }
 .st-warn { color: var(--amber, #d9a441); }
-.tabs { display: flex; gap: 2px; margin-right: auto; }
-.tab { font: 600 12.5px var(--font); color: var(--ink-2); background: none; border: 1px solid transparent;
-  border-radius: var(--radius-s); padding: 5px 10px; cursor: pointer; }
-.tab.on { color: var(--ink); background: var(--field); border-color: var(--line); }
-pre.out { margin: 0; max-height: 52vh; overflow: auto; padding: 10px 12px; font: 12px/1.5 ui-monospace, Consolas, monospace;
-  background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-s); white-space: pre-wrap; word-break: break-all; }
 .restarting { position: fixed; inset: 0; background: #1e1d23cc; display: grid; place-items: center; z-index: 50; }
 .restarting > div { background: var(--shell); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 20px 28px; text-align: center; }
 .restarting[hidden] { display: none; }
 
-#romm-list input { width: 100%; margin-bottom: 6px; font: 13px var(--font); padding: 6px 8px; border-radius: var(--radius-s);
-  border: 1px solid var(--line); background: var(--field); color: var(--ink); }
-#romm-list[hidden], #romm-out[hidden], #romm-copy[hidden] { display: none; }
-table.romm-all td.p { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--teal); }
-table.romm-all tr.in-use td:nth-child(2) { font-weight: 600; }
-.slug { white-space: nowrap; font: 12px ui-monospace, Consolas, monospace; color: var(--grape-ink); background: none; border: 0; padding: 0; cursor: pointer; }
-.slug:hover { text-decoration: underline; } .slug.copied::after { content: " copied"; color: var(--teal); font-family: var(--font); }
 
 /* ---------- power menu ---------- */
 .power { position: relative; }
@@ -281,29 +249,12 @@ table.romm-all tr.in-use td:nth-child(2) { font-weight: 600; }
 .menu button.danger b { color: var(--red); }
 #shutdown[hidden] { display: none; }
 
-.field.inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
-.field.inline select { font: 13px var(--font); padding: 5px 8px; border-radius: var(--radius-s);
-  border: 1px solid var(--line); background: var(--field); color: var(--ink); max-width: 100%; }
 
 /* "Files in this folder" row */
 .node.own-files > .row .name { font-style: italic; color: var(--ink-2); }
 .node.own-files.sel > .row .name { color: var(--ink); }
 
-.links-box { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 12px; margin: 6px 0; background: var(--field); }
-.links-box[hidden] { display: none; }
-.links-box .field input { background: var(--shell); }
 
-/* RomM Mapper: folder choice dropdowns and the reference list */
-table.romm select.act { font: 12.5px var(--font); padding: 4px 6px; border-radius: var(--radius-s); width: 200px;
-  border: 1px solid var(--line); background: var(--field); color: var(--ink); }
-.ref-btn { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font: 600 12.5px var(--font);
-  color: var(--grape-ink); background: none; border: 1px dashed var(--grape-ink); border-radius: 99px; padding: 4px 12px; cursor: pointer; }
-.ref-btn svg { width: 14px; height: 14px; fill: currentColor; }
-.ref-btn:hover, .ref-btn.on { background: var(--grape-soft); border-style: solid; }
-:root:not([data-theme="light"]) .ref-btn:hover, :root:not([data-theme="light"]) .ref-btn.on { background: #b9a6f21f; }
-.ref-panel { border: 1px solid var(--grape-ink); border-left-width: 4px; border-radius: var(--radius-s); padding: 10px; }
-.ref-head { margin-bottom: 8px; }
-table.romm td.p { max-width: 200px; }
 
 /* ---------- phones / narrow windows: Activity, Log and Downloading follow the folder tree ---------- */
 @media (max-width: 980px) {
@@ -330,7 +281,6 @@ table.romm td.p { max-width: 200px; }
 .btn.danger-fill:disabled { opacity: .6; }
 .small.ok { color: var(--teal); }
 .confirm-bar[hidden], .dlg-foot[hidden], .leftover[hidden] { display: none; }
-#romm-apply { align-self: start; }
 
 /* app menu (settings, theme, restart, shut down) */
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
