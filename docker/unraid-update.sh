@@ -3,17 +3,19 @@
 # this server and (re)start the container. Run it once to install, and again whenever you've pushed
 # changes. Your catalog, ticks and downloads are kept (they live in CONFIG and DATA, not the image).
 #
-#   bash /path/to/appdata/rom-sync/unraid-update.sh
+#   DATA=/path/to/roms bash /path/to/appdata/rom-sync/unraid-update.sh
+#
+# DATA (where synced files go) is required; everything else lives next to this script.
 #
 # Private GitHub repository: create a read-only token (GitHub > Settings > Developer settings >
 # Fine-grained tokens, this repository only, Contents: Read) and put it in
-# /path/to/appdata/rom-sync/github-token  (one line, nothing else). Public repositories need none.
+# github-token next to this script (one line, nothing else). Public repositories need none.
 set -euo pipefail
 
 REPO="${REPO:-sireteanu/rom-sync}"             # GitHub owner/name
 BRANCH="${BRANCH:-main}"
-BASE="${BASE:-/path/to/appdata/rom-sync}"     # this script, the source and the config live here
-DATA="${DATA:-/path/to/roms}"                 # where synced files go
+BASE="${BASE:-$(cd "$(dirname "$0")" && pwd)}"  # this script, the source and the config live here
+DATA="${DATA:?Set DATA to the folder where synced files go, e.g. DATA=/path/to/roms}"
 PORT="${PORT:-8484}"
 TZ="${TZ:-America/New_York}"
 NAME="${NAME:-rom-sync}"
