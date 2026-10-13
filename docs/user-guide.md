@@ -1,7 +1,7 @@
 # Rom Sync user guide
 
 This guide walks you through using Rom Sync day to day: choosing what to download, keeping it up
-to date, and showing it in RomM. For the technical reference, see the [README](../README.md).
+to date. For the technical reference, see the [README](../README.md).
 
 - [1. Install and open it](#1-install-and-open-it)
 - [2. Scan the site](#2-scan-the-site)
@@ -12,7 +12,7 @@ to date, and showing it in RomM. For the technical reference, see the [README](.
 - [7. Settings](#7-settings)
 - [8. Keep it up to date automatically](#8-keep-it-up-to-date-automatically)
 - [9. Restart, shut down and update](#9-restart-shut-down-and-update)
-- [10. Show your games in RomM](#10-show-your-games-in-romm)
+- [10. RomM](#10-romm)
 - [11. Troubleshooting](#11-troubleshooting)
 
 ---
@@ -179,51 +179,13 @@ themselves; new folders arrive too if their parent folder is ticked.
   the title afterwards.
 - **Theme**: the menu's **Light theme** / **Dark theme** switches between them.
 
-## 10. Show your games in RomM
+## 10. RomM
 
-Rom Sync can show your synced folders to [RomM](https://github.com/rommapp/romm) under RomM's
-platform names (`snes`, `psx`, …) without moving or copying anything. Click **RomM Mapper** in the
-header.
-
-**Step 1 - RomM folder.** Where Rom Sync's downloads appear inside RomM's container. The default,
-`/romm/library/roms/lolroms`, is right when RomM's roms folder is the folder that holds Rom Sync's
-`lolroms` folder.
-
-**Step 2 - check the platforms.** The table lists every folder that has files and what it becomes
-in RomM. Most are filled in already. To change one, pick from its dropdown:
-
-- a **RomM platform** (all of them are listed with their full names). A subfolder with the same
-  platform as its parent - like *T-En* under *Super Famicom* showing `snes` - is part of that
-  platform,
-- **exclude** - leave it out of RomM (its name is added to RomM's exclude rules).
-
-BIOS folders show *firmware (automatic)* - they're handled for you.
-
-Every choice is saved the moment you make it - closing the dialog, restarting or shutting down
-doesn't lose it. A backup copy is kept next to the catalog and restored automatically if the
-catalog is ever reset. **RomM platforms list** (the button with the book icon) opens a searchable
-reference of every platform RomM knows.
-
-**Step 3 - create the platform links.** Rom Sync puts one link per platform next to its download
-folder - for example `/path/to/roms/snes` pointing to `lolroms/Nintendo/Super Famicom`. Click
-**Create / update links now** once; from then on (**Update the links after every sync** is ticked)
-they're kept up to date after every sync. In RomM's compose file, map that folder as RomM's roms
-folder (the **RomM compose** tab shows the line):
-
-```yaml
-      - /path/to/roms:/romm/library/roms
-```
-
-(Rom Sync's own compose file must map that folder and download into its `lolroms` subfolder - the
-example compose file does.) Firmware folders aren't linked: the dialog lists them so you can copy
-them to RomM's bios folder.
-
-**Step 4 - the config file.** Copy the **config.yml** tab and merge it into RomM's `config.yml`
-(in RomM's config folder), keeping your other settings. It tells RomM which subfolders belong to a
-platform (using `{category}` levels, so new subfolders are picked up), which subfolders to ignore
-(including the ones you set to *exclude*), and to ignore the `lolroms` folder itself.
-
-**Step 5** - restart RomM and scan its library.
+Showing your games in RomM is done by [ROM Mapper](https://github.com/sireteanu/rom-mapper), a
+separate app (Rom Sync's RomM Mapper moved there in version 1.3.5). It reads Rom Sync's download
+folder from disk, so the two work side by side. To keep the choices you made in Rom Sync's RomM
+Mapper, copy `romm-mapper.json` from Rom Sync's config folder into ROM Mapper's config folder.
+The platform links Rom Sync made stay in place.
 
 ## 11. Troubleshooting
 
@@ -241,10 +203,6 @@ because they were copied in as another user. On Unraid run *Tools → New Permis
 ticking its subfolders leaves its own files out).
 
 **"Paused: …" during a sync.** The site's daily limit was reached; the next sync continues.
-
-**A RomM platform is missing.** Make sure the folder has synced files, has a platform in the RomM
-Mapper, the links are up to date (Create / update links now), and RomM's `config.yml` has the new
-version of the generated section. Then rescan in RomM.
 
 **Something else?** The log (right side, and `rom-sync.log` in the config folder) says what went
 wrong. Open an issue on GitHub with the relevant log lines.

@@ -5,6 +5,15 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-10-12
+
+### Changed
+- **The RomM Mapper moved to ROM Mapper**, a separate app that can map Rom Sync's downloads and other
+  folders to RomM. The RomM Mapper button and its links are gone from Rom Sync; the platform links it
+  made stay where they are.
+- Your RomM Mapper choices are kept in `romm-mapper.json` in the config folder - copy it to ROM
+  Mapper to keep them.
+
 ## [1.3.4] - 2026-09-15
 
 ### Improved

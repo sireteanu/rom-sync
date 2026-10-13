@@ -2,7 +2,7 @@
 
 Web app for keeping local copies of lolroms.com folders in sync. `lolroms_sync` scans the whole
 site into a catalog, shows a folder tree with tri-state ticks, syncs the ticked folders, cleans up
-files that aren't part of the sync, and maps folders to RomM. `lolroms_sync.core` is the sync
+files that aren't part of the sync (the RomM Mapper moved to sireteanu/rom-mapper in 1.3.5). `lolroms_sync.core` is the sync
 engine (forked from lolroms-downloader v3.2; its command-line tool was removed in 1.3.0).
 Python 3.9+, async (httpx), FastAPI.
 It runs on **Windows** (`start.bat`) and in **Docker on Unraid** -
@@ -15,7 +15,6 @@ keep both working: Windows paths and console, and PUID/PGID/UMASK plus `/config`
 - Lint: `python -m pyflakes src tests`
 - Web app: `python run.py [--data DIR] [--port 8484] [--host 0.0.0.0] [--password X]`
   (Windows users: `start.bat`; installed: `lolroms-sync`)
-- RomM output from a catalog: `python -m lolroms_sync.romm --config DIR [compose|config]`
 - Docker: `docker build -t lolroms-sync .` / `docker compose up -d --build`
 
 ## Layout
@@ -28,7 +27,6 @@ src/lolroms_sync/            the web app
                 tree() = folders with recursive totals (cached; invalidate() on structural change)
   scanner.py    reads listing pages (never files) into the catalog; prunes what the site dropped
   cleanup.py    Clean up: walk the download folder, judge files (gone / part / unticked), delete
-  romm.py       RomM Mapper (platform links + config.yml); romm_slugs.py vendored slugs
   static/       index.html, app.css, app.js - no build step, no CDN (works offline on a LAN)
   core/         the sync engine
     download.py Downloader: plan() + download(); run_item() = one worker step (pushed-back files
@@ -37,7 +35,7 @@ src/lolroms_sync/            the web app
     extract.py  LinkExtractor incl. per-file date/size from the listing row
     limits.py   Limiter (page pacing), DownloadGate (auto parallel downloads), RateLimit
     urls.py / util.py / constants.py / config.py   helpers
-tests/  conftest (app_factory + API helpers), test_app, test_engine, test_cleanup, test_changes, test_outage, test_romm, test_units
+tests/  conftest (app_factory + API helpers), test_app, test_engine, test_cleanup, test_changes, test_outage, test_units
 docker/entrypoint.sh, Dockerfile (deps in their own layer), docker-compose.yml, unraid/, .github/workflows/
 start.bat, run.py   launchers (`run` name so it never shadows the package)
 ```
@@ -70,7 +68,7 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
 - **Change history** (`changes` table, `Catalog.add_change`): a sync records new/updated/resumed/failed
   per file (job = the sync's start time), Clean up records deleted; pruned after 365 days. Activity
   counters open `/api/sync/files?kind=`, the header's Activity log uses `/api/changes/days` + `?day=`.
-- Header: Scan / Sync / Stop / RomM Mapper / Activity log, then one menu (☰, `#btn-menu`) with
+- Header: Scan / Sync / Stop / Activity log, then one menu (☰, `#btn-menu`) with
   Settings, theme, Restart, Shut down.
 - Slow disk work stays off the event loop: sync planning (`plan_all()` via `asyncio.to_thread`;
   Manifest uses `check_same_thread=False`, safe because downloads start only after planning) and the
@@ -87,25 +85,9 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
 - **Startup**: a busy port that answers /api/health means Rom Sync already runs -> open it, exit 0.
   Logs also go to `<config>/rom-sync.log`. `run.py` pauses on errors (double-click on Windows)
   and re-launches itself with `.venv` when the current Python lacks the dependencies.
-- **RomM Mapper** (`romm.py`, `romm_slugs.py` vendored from rommapp/romm platform_slugs.py): resolves
-  each folder to platform/merge/bios/skip(/exclude)/unmapped from `RULES` + user map (settings `romm`,
-  mirrored to `<config>/romm-mapper.json` and restored from it at start if the catalog lost it;
-  one "RomM folder" (`romm_folder`) = where the downloads appear inside RomM's container; the
-  library path is derived from it), groups by slug (several folders -> their common folder, the
-  "mount"), and writes the RomM compose line and config.yml.
-  Layout `category` (default) writes one `{category}`/`{subcategory}` template per depth; every
-  subfolder of a folder RomM descends into that isn't wanted goes into the (global, case-insensitive)
-  multi_file exclude list. A wanted folder whose name is excluded elsewhere gets an extra exact-name
-  template (RomM follows literal levels even when excluded); an unwanted grouping folder with files
-  at a wildcard depth forces exact names for that platform (`_templates()`). RomM facts it
-  relies on are in the module docstring - re-check them against RomM's config_manager.py when
-  RomM changes. Never move or rename the user's folders for RomM.
-  Platform links only (Docker mounts per platform were removed in 1.3.0; `options_from()` converts
-  old `method`/`host_path`/`library` keys): RomM's roms folder = links folder (default: parent of the
-  download folder, e.g. /romm with downloads in /romm/lolroms); `apply_links()` keeps relative
-  symlinks `<slug> -> lolroms/<mount>` and only ever changes links pointing into the download folder;
-  config.yml adds `exclude.platforms: [lolroms]`. A sync updates links only when `keep_links` is on
-  (set by POST /api/romm/links, i.e. "Create / update links now"), so non-RomM users get no links.
+- **RomM**: the RomM Mapper moved to sireteanu/rom-mapper (1.3.5). `Engine._keep_romm_settings()`
+  writes the catalog's old `romm` setting to `<config>/romm-mapper.json` once (if missing) so users
+  can copy it; nothing else reads it. Don't add RomM features here.
 - The display name is **Rom Sync**; package, module, image and folder names stay `lolroms-sync`.
 - Interface copy: plain sentence-case verbs ("Scan site", "Sync selected"); errors say what to do.
   Dark is the default theme; light via the header toggle (localStorage).
@@ -171,7 +153,7 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   releases API directly.) `docker.yml` (registry image) runs only when started by hand.
 - `git fetch origin main` before pushing from a shallow clone.
 - **Docs stay current with every change** (same commit): `README.md` is the complete reference
-  for people and AI assistants (features, how it works, RomM, settings, options/env vars, files,
+  for people and AI assistants (features, how it works, settings, options/env vars, files,
   API, code map, release process, lolroms facts); `docs/user-guide.md` teaches users step by step;
   `CHANGELOG.md` gets the version's entry. The GitHub repo's About text/topics can't be
   changed from this session (403) - give the user a `gh repo edit` command if it needs updating.
@@ -185,7 +167,7 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   site when the user asks, and never start a download of the real site unless they asked for it
   (it can be hundreds of GB).
 - Keep saved settings working across versions: convert old keys instead of dropping a user's choices.
-- Files Rom Sync writes for itself (romm-mapper.json) go through `.tmp` + `os.replace`.
+- Files Rom Sync writes for itself go through `.tmp` + `os.replace`.
 
 ## Gotchas
 - `asyncio.Condition` must be created inside the running loop (Limiter is built in `Scanner.run`).
