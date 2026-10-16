@@ -276,3 +276,14 @@ def test_romm_mapper_is_gone_but_its_choices_are_kept_for_copying(site, app_fact
     assert json.loads((cfg / "romm-mapper.json").read_text())["map"] == {"Atari/2600": "exclude"}
     assert c.get("/api/romm").status_code in (404, 405)
     assert "RomM" not in c.get("/").text
+
+
+def test_replies_are_compressed_and_a_hidden_page_stops_asking(site, app_factory):
+    c = app_factory(site)
+    scan(c)
+    js = c.get("/static/app.js", headers={"Accept-Encoding": "gzip"})
+    assert js.headers.get("content-encoding") == "gzip"
+    assert "visibilitychange" in js.text and "document.hidden" in js.text
+    small = c.get("/api/health", headers={"Accept-Encoding": "gzip"})
+    assert small.headers.get("content-encoding") is None           # tiny replies stay as they are
+    assert c.get("/api/tree", headers={"Accept-Encoding": "gzip"}).json()  # still reads fine

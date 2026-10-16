@@ -10,6 +10,7 @@ import secrets
 from typing import Optional
 
 from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -58,6 +59,9 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
 
     def eng() -> Engine:
         return holder["engine"]
+
+    # folder trees, search results and file lists are large JSON that compresses well
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     if password:
         @app.middleware("http")
