@@ -14,8 +14,8 @@ services:
       - "8484:8484"
     volumes:
       - /path/to/appdata/rom-sync/config:/config   # catalog, settings, ticks, log
-      # RomM's roms folder. Downloads go to its "lolroms" subfolder (LOLROMS_DATA below), and
-      # Rom Sync puts one link per RomM platform next to it (RomM dialog: "Platform links").
+      # Your ROMs folder. Downloads go to its "lolroms" subfolder (LOLROMS_DATA below);
+      # ROM Mapper can then map that folder for RomM and your frontends.
       - /path/to/roms:/romm
     environment:
       - PUID=99            # nobody
