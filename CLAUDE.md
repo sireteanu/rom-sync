@@ -75,6 +75,8 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   Clean up check. Planning stats each file once and passes `st` on; never chmod/utime a file whose
   mode/date already match (shares like Unraid's array make each call slow).
 - Status `selection` is cached per (tree object, rules) in `Engine._selection_totals()`.
+- The page stops polling while its tab is hidden (`visibilitychange`); replies over 1 KB are gzipped
+  (`GZipMiddleware`).
 - Status `sync` has `bytes_planned`, `bytes_left`, `files_left`, `eta` (seconds, from a ~2 min speed
   average) for the "This sync" box.
 - **Interrupted syncs resume**: `Engine.start()` stores `interrupted_job`; it's cleared when the

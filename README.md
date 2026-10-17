@@ -224,7 +224,9 @@ dialog opens, Rom Sync walks the download folder and judges each file against th
 - **Activity log**: one row per day (newest first) with counts and sizes per kind; opening a day
   loads its files grouped by kind (`GET /api/changes/days`, `GET /api/changes?day=`).
 - Storage strip, folder tree, Activity (job line, This sync box, counters, Clean up), Log, Downloading.
-- The page polls `/api/status` every second while busy, every 4 s when idle.
+- The page polls `/api/status` every second while busy, every 4 s when idle, and not at all while
+  its browser tab is hidden (it refreshes as soon as you come back). Replies over 1 KB are
+  gzip-compressed (folder tree, search, file lists, the page's script).
 
 ---
 

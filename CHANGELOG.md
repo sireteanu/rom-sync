@@ -5,6 +5,14 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-10-16
+
+### Improved
+- **A hidden page stops asking for updates**, so a forgotten browser tab no longer keeps Rom Sync
+  and your disks busy. It catches up as soon as you come back to it.
+- **Smaller replies**: the folder tree, search results and file lists are sent compressed, which
+  makes the page quicker on a phone or over a VPN.
+
 ## [1.3.5] - 2026-10-12
 
 ### Changed
