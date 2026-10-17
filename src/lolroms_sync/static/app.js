@@ -537,8 +537,10 @@ async function poll(once = false) {
   } catch (e) {
     $("#job-line").textContent = "Lost contact with Rom Sync - is it still running?";
   }
-  if (!once || true) pollTimer = setTimeout(poll, busy ? 1000 : 4000);
+  // a hidden tab stops asking (keeps the server and its disks idle); coming back refreshes at once
+  if (!document.hidden) pollTimer = setTimeout(poll, busy ? 1000 : 4000);
 }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
 
 /* ---------------------------------------------------------------- buttons */
 async function startJob(path, body) {
