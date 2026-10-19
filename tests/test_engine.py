@@ -375,3 +375,34 @@ def test_a_sync_with_nothing_to_do_writes_nothing_to_the_disk(site, app_factory,
     st = sync(c)
     assert st["sync"]["up to date"] == 7
     assert [w for w in writes if str(w[1]).endswith((".7z", ".zip"))] == []
+
+
+def test_folders_named_after_a_set_date_are_saved_without_it(site_factory, app_factory):
+    """lolroms names many folders after the set's date ("Archimedes (20231029-220453)"); files are
+    saved under the folder name without it, and Clean up doesn't count them as leftovers."""
+    from conftest import on_disk, scan, select, sync
+    site = site_factory("dated")
+    c = app_factory(site)
+    scan(c)
+    select(c, "Acorn/Archimedes (20231029-220453)")
+    sync(c)
+    assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z"}
+    assert c.get("/api/cleanup").json()["files"] == []
+    n = len(site.file_requests())
+    sync(c)                                                    # second sync: nothing to fetch
+    assert len(site.file_requests()) == n
+
+
+def test_old_catalog_paths_lose_the_set_date(tmp_path):
+    from lolroms_sync.catalog import Catalog
+    from lolroms_sync.core.sync import FileInfo
+    cat = Catalog(str(tmp_path / "catalog.db"))
+    d = "Acorn/Archimedes (20231029-220453)"
+    cat.add_dirs({"Acorn", d}, 1)
+    cat.page_scanned(d, "u", 1, [("https://x/?file=a.7z", "Zarch (20231029-220453).7z",
+                                  f"{d}/Zarch (20231029-220453).7z", FileInfo(ext=".7z"))])
+    cat.commit()
+    cat.db.close()
+    cat = Catalog(str(tmp_path / "catalog.db"))
+    (rel,), = cat.db.execute("SELECT rel FROM files").fetchall()
+    assert rel == "Acorn/Archimedes/Zarch (20231029-220453).7z"      # file names keep theirs

@@ -7,7 +7,7 @@ from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 from .config import Config
 from .constants import SKIP_EXTENSIONS, TRACKING_PARAMS
-from .util import _fold, extension, safe_segment
+from .util import _fold, extension, local_folder, safe_segment
 
 
 class UrlRules:
@@ -105,8 +105,9 @@ class UrlRules:
                 break
         if source is None:
             source = unquote(p.path)
-        parts = [safe_segment(s) for s in source.replace("\\", "/").split("/")
-                 if s.strip() not in ("", ".", "..")]
+        parts = [s for s in source.replace("\\", "/").split("/") if s.strip() not in ("", ".", "..")]
+        # folders lose the set's date stamp ("Archimedes (20231029-220453)" -> "Archimedes")
+        parts = [safe_segment(local_folder(s)) for s in parts[:-1]] + [safe_segment(s) for s in parts[-1:]]
         return "/".join(parts) or "download.bin"
 
     def crawlable(self, url: str) -> bool:

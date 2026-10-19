@@ -88,6 +88,9 @@ def test_rel_path_mirrors_site_folders():
     assert r.rel_path("https://lolroms.com/?file=Atari%2F5200%2FGame+%28USA%29.7z") == "Atari/5200/Game (USA).7z"
     assert r.rel_path("https://lolroms.com/?file=..%2F..%2Fetc%2Fx.7z") == "etc/x.7z"   # no escaping the folder
     assert r.rel_path("https://h.com/roms/nes/A%3AB.zip") == "roms/nes/A_B.zip"
+    # folders named after a set's date are saved without it; file names are left alone
+    assert (r.rel_path("https://lolroms.com/?file=Acorn%2FRisc+PC+%28Flux%29+%2820230506-040449%29%2FX+%2820230506-040449%29.7z")
+            == "Acorn/Risc PC (Flux)/X (20230506-040449).7z")
 
 
 def test_names_and_children():

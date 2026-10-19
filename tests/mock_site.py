@@ -14,6 +14,8 @@ Modes (combine with commas):
   tables      render listings as an HTML table (name | date | size) instead of lolroms' div rows
   bulk        adds Atari/Bulk with 60 slow-ish files (for parallel-download tests)
   brokenfile  adds Atari/5200/Broken.7z, which always answers 502 (the site itself is fine)
+  dated       adds Acorn/Archimedes (20231029-220453), a folder named after its set's date like
+              many real lolroms folders
 Attributes you can change while a test runs:
   max_conc    downloads allowed at once; more get 503 + Retry-After: 1 (None = unlimited)
   daily_limit after this many completed downloads every file answers with an HTML limit page
@@ -79,6 +81,10 @@ class MockSite:
             self.files["Atari/5200"].append("Limited.7z")
         if "brokenfile" in self.modes:
             self.files["Atari/5200"].append("Broken.7z")
+        if "dated" in self.modes:
+            self.tree["Acorn"].append("Archimedes (20231029-220453)")
+            self.tree["Acorn/Archimedes (20231029-220453)"] = []
+            self.files["Acorn/Archimedes (20231029-220453)"] = ["Zarch.7z"]
         if "bulk" in self.modes:
             self.tree["Atari"].append("Bulk")
             self.tree["Atari/Bulk"] = []

@@ -82,6 +82,10 @@ Click **Sync selected**. Rom Sync:
 Run it again any time - it only ever fetches what's missing or changed. If you copied files into
 the download folder yourself, Rom Sync recognises them (by size) and doesn't download them again.
 
+Many folders on lolroms carry the date of their set, like *Archimedes (20231029-220453)*. Rom Sync
+saves them without it (*Archimedes*), so your folders keep the same name when the site updates a
+set. File names are kept exactly as on the site.
+
 Every downloaded file gets the **date shown on the website**, so you can sort by date in your file
 manager to see what's new; folders get the date of their newest file. Files get permissions **777**
 (everyone can read and change them) unless you change that in Settings.

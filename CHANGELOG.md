@@ -5,6 +5,14 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-10-19
+
+### Changed
+- Folders the site names after their set's date, like "Archimedes (20231029-220453)", are saved
+  without the date ("Archimedes"). Folder names on disk no longer change each time the site moves
+  to a newer set. File names are left as they are. Existing catalogs are updated at the first
+  start; files already in a plain-named folder are recognised by size instead of downloaded again.
+
 ## [1.3.6] - 2026-10-16
 
 ### Improved

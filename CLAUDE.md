@@ -108,7 +108,9 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
 4. **Ignored page regions**: `<nav>`, site-level `<header>`, role=navigation/banner, NAV_TOKENS
    class/ids (`Config.ignore_nav`), and always `.sortbar` / `.back` (lolroms' sort bar and
    "⬅ Back" link).
-5. **Downloads** go to `<folder>/<path from the file URL>`, written as `.part` and renamed only when
+5. **Downloads** go to `<folder>/<path from the file URL>` (folder segments lose the set's date stamp
+   ` (YYYYMMDD-HHMMSS)` via `util.local_folder()`; file names keep it; Clean up maps folders with
+   `util.local_rel()`, so both must stay in step), written as `.part` and renamed only when
    complete; retries resume with `Range` + `If-Range`. A `text/html` response for a file is rejected,
    and archive headers are checked against `MAGIC`. The file's mtime is set to the site's date.
 5a. **Sync** (`sync.plan`): each listed file is compared with the disk and the manifest in the download

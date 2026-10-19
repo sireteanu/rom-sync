@@ -159,6 +159,10 @@ downloaded before:
   allows it because no download runs yet) and asks the disk once per file (`os.stat`, passed to
   `sync.plan()`, `stamp_file()` and `_set_mode()`); permissions and dates are only written when they
   differ. The Clean up check (`walk` + `find`) also runs in a worker thread.
+- **Folder names**: lolroms names many folders after the dump set's date (`Archimedes (20231029-220453)`).
+  On disk the stamp is left out of folder names (`util.local_folder()`, used by `UrlRules.rel_path()`
+  and Clean up), so a folder keeps its name when the site moves to a newer set; file names keep
+  theirs. Catalogs from before 1.3.7 are updated at start (`Catalog._drop_set_dates()`).
 - Files are written as `<name>.part` and renamed when complete. A web page received instead of a
   file is rejected, and archive headers are checked (7z/zip/rar…).
 - **Dates**: lolroms sends no `Last-Modified` header, so the listing date is the only date; files
@@ -294,7 +298,7 @@ answers like Rom Sync, a new start just opens the running copy; otherwise it exp
 | `<config>/catalog.db` | SQLite (WAL): `dirs`, `files` (listing date/size, local state), `selection` (rules), `settings`, `scans`, `history`, `changes` (per-file change history: time, local day, sync id = its start time, kind new/updated/resumed/failed/deleted, path, size, note; pruned after 365 days) |
 | `<config>/rom-sync.log` | Log (rotating, 2 MB × 3) |
 | `<config>/romm-mapper.json` | RomM Mapper choices from before 1.3.5, kept for copying to ROM Mapper |
-| `<data>/<site path>` | Synced files, same folder structure as the site (`Nintendo/Super Famicom/…`) |
+| `<data>/<site path>` | Synced files, same folder structure as the site (`Nintendo/Super Famicom/…`), except that a folder's set date is left out (`Archimedes (20231029-220453)` is saved as `Archimedes`) |
 | `<data>/.dir_crawler.db` | Manifest: what the listing said for each saved file, Last-Modified/ETag, per-site parallel limit |
 | `<data>/…/*.part` | Unfinished downloads (resumed later) |
 
@@ -396,3 +400,5 @@ Verified in a browser (October 2026). If the site changes, these are the first t
 - File responses: `Content-Length`, `Accept-Ranges: bytes`, `Content-Disposition`, served through
   Cloudflare; **no `Last-Modified` or `ETag`**.
 - When the daily download limit is reached the site serves an HTML page instead of the file.
+- Many folders carry the dump set's date: `Archimedes (20231029-220453)`, `Risc PC (Flux) (20230506-040449)`
+  (pattern ` (YYYYMMDD-HHMMSS)` at the end of the name; seen October 2026).

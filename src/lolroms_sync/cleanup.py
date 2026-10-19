@@ -18,7 +18,7 @@ import os
 from typing import Optional
 
 from .core.sync import MANIFEST_NAME, Manifest
-from .core.util import fmt_bytes, fs_path, safe_segment
+from .core.util import fmt_bytes, fs_path, local_rel
 
 log = logging.getLogger("dircrawl")
 
@@ -61,7 +61,7 @@ def walk(root: str) -> list:
 
 
 def sanitized(path: str) -> str:
-    return "/".join(safe_segment(s) for s in path.split("/")) if path else ""
+    return local_rel(path)
 
 
 def find(catalog, types, disk: list) -> list:

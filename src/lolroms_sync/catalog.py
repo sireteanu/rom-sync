@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, Optional
 
 from .core.sync import size_range
+from .core.util import local_rel
 
 SYNCED_WORDS = ("new", "updated", "resumed", "up to date", "already in folder")
 
@@ -112,11 +113,25 @@ class Catalog:
             CREATE INDEX IF NOT EXISTS changes_job ON changes(job, kind);
         """)
         self.db.execute("INSERT OR IGNORE INTO dirs(path, parent, name, depth) VALUES ('', NULL, '', 0)")
+        self._drop_set_dates()
         self.db.commit()
         self._tree: Optional[dict] = None
         self._tree_types = None
         self._tree_at = 0.0
         self.dirty = True
+
+    def _drop_set_dates(self) -> None:
+        """Catalogs from before 1.3.7 saved files under folder names with the set's date stamp
+        ("Archimedes (20231029-220453)"); point them at the folder name without it."""
+        fixes = []
+        for url, rel in self.db.execute("SELECT url, rel FROM files WHERE rel GLOB '*(*-*)*/*'"):
+            folder, _, name = rel.rpartition("/")
+            new = f"{local_rel(folder)}/{name}"
+            if new != rel:
+                fixes.append((new, url))
+        if fixes:
+            self.db.executemany("UPDATE files SET rel=?, local=NULL, local_size=NULL, synced=NULL "
+                                "WHERE url=?", fixes)
 
     def invalidate(self) -> None:
         """Structural change (ticks, a finished scan, settings): rebuild the tree on next read."""
