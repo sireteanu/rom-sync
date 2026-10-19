@@ -35,6 +35,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.6 4.9-.1-2.8 2-1.6-2-3.4-2.4.9-2.4-1.4L15.3 2h-3.9l-.4 2.6-2.4 1.4-2.4-.9-2 3.4 2 1.6v2.8l-2 1.6 2 3.4 2.4-.9 2.4 1.4.4 2.6h3.9l.4-2.6 2.4-1.4 2.4.9 2-3.4-2-1.6Z"/></svg>
           <span><b>Settings</b><small>Download folder, file types, speed, schedule</small></span>
         </button>
+        <button id="btn-fmap" role="menuitem">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3zM13 13h5m-2-2 2 2-2 2"/></svg>
+          <span><b>Folder map</b><small>Save site folders under other folder names</small></span>
+        </button>
         <button id="btn-theme" role="menuitem" class="theme-toggle">
           <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
           <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>
@@ -165,6 +169,23 @@
   </form>
 </dialog>
 
+<dialog id="fmap-dlg" class="dlg wide">
+  <form id="fmap-form" method="dialog">
+    <div class="dlg-head"><h2>Folder map</h2><button class="btn icon" value="cancel" aria-label="Close">✕</button></div>
+    <p class="hint">Save a site folder, and everything in it, under a folder name of your choice in the
+      download folder. Use <b>*</b> in the site folder for any text, so a rule keeps working when the site
+      renames a folder: <code>Acorn/Archimedes (*)</code> → <code>Acorn/Archimedes</code>.
+      Several site folders can share one folder. The first rule that matches wins.</p>
+    <div class="fmap-head"><span>Folder on the site</span><span></span><span>Save in this folder</span><span></span></div>
+    <div id="fmap-rows"></div>
+    <button type="button" class="btn ghost" id="fmap-add">+ Add rule</button>
+    <p class="hint">Files already downloaded stay where they are; the next sync puts them in the new
+      folder (move them yourself first to avoid downloading them again). Old copies show up in Clean up.</p>
+    <p id="fmap-error" class="error" hidden></p>
+    <div class="dlg-foot"><button class="btn ghost" value="cancel">Cancel</button><button class="btn primary" id="fmap-save" value="save">Save folder map</button></div>
+  </form>
+</dialog>
+
 <dialog id="list-dlg" class="dlg wide">
   <form method="dialog" class="dlg-head"><h2 id="list-title">Files</h2><button class="btn icon" aria-label="Close">✕</button></form>
   <p id="list-sub" class="muted small"></p>
@@ -211,6 +232,9 @@
       <span class="c-num size"></span>
       <span class="c-date date"></span>
       <span class="c-meter"><span class="meter"><span class="fill"></span></span><span class="pct"></span></span>
+      <button class="map" title="Save this folder under another name (Folder map)" aria-label="Map folder">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10a5 5 0 0 1 0 10H9m0 0 3-3m-3 3 3 3"/></svg>
+      </button>
       <button class="info" title="Show files in this folder" aria-label="Show files">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
       </button>

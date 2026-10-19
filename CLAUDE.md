@@ -65,6 +65,9 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   `confirm: true`, refuses while busy, and re-checks so only current leftovers are removed; then
   empty folders go, `Manifest.forget()` and `Catalog.forget_local()`. Never delete anything else
   from the download folder.
+- **Folder map** (`folder_map.py`, setting `folder_map`, `/api/folder-map`, ☰ → Folder map and the
+  arrow button on tree rows): rules are edited in the page only (no text file). Saving them, and every
+  start, runs `Catalog.remap(engine.rel_of)` so catalog paths always match the rules.
 - **Change history** (`changes` table, `Catalog.add_change`): a sync records new/updated/resumed/failed
   per file (job = the sync's start time), Clean up records deleted; pruned after 365 days. Activity
   counters open `/api/sync/files?kind=`, the header's Activity log uses `/api/changes/days` + `?day=`.
@@ -108,9 +111,10 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
 4. **Ignored page regions**: `<nav>`, site-level `<header>`, role=navigation/banner, NAV_TOKENS
    class/ids (`Config.ignore_nav`), and always `.sortbar` / `.back` (lolroms' sort bar and
    "⬅ Back" link).
-5. **Downloads** go to `<folder>/<path from the file URL>` (folder segments lose the set's date stamp
-   ` (YYYYMMDD-HHMMSS)` via `util.local_folder()`; file names keep it; Clean up maps folders with
-   `util.local_rel()`, so both must stay in step), written as `.part` and renamed only when
+5. **Downloads** go to `<folder>/<path from the file URL>` (folder segments go through the user's
+   Folder map, `folder_map.py`, in `UrlRules.rel_path()`; file names never change; Clean up maps
+   catalog folders to disk with the same `FolderMap.disk_folder()`, so both must stay in step;
+   no automatic renaming of folders - the owner wants mapping done only by their rules), written as `.part` and renamed only when
    complete; retries resume with `Range` + `If-Range`. A `text/html` response for a file is rejected,
    and archive headers are checked against `MAGIC`. The file's mtime is set to the site's date.
 5a. **Sync** (`sync.plan`): each listed file is compared with the disk and the manifest in the download

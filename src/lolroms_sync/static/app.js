@@ -112,7 +112,17 @@ function fillRow(el, n, depth, showPath) {
     p.textContent = n.path.slice(0, n.path.lastIndexOf("/"));
     name.append(p);
   }
-  name.title = n.error ? `${n.path}\nCould not be read: ${n.error}` : n.path;
+  if (n.saved_to) {
+    const d = document.createElement("span");
+    d.className = "dest";
+    d.textContent = "\u2192 " + n.saved_to;
+    name.append(d);
+  }
+  name.title = (n.error ? `${n.path}\nCould not be read: ${n.error}` : n.path)
+    + (n.saved_to ? `\nSaved in: ${n.saved_to} (Folder map)` : "");
+  const mapBtn = $(".map", row);
+  mapBtn.classList.toggle("on", !!n.saved_to);
+  mapBtn.title = n.saved_to ? `Saved in ${n.saved_to} - change it (Folder map)` : "Save this folder under another name (Folder map)";
   $(".files", row).textContent = n.files ? num(n.files) : "";
   $(".size", row).textContent = n.files ? bytes(n.bytes) : "";
   $(".date", row).textContent = n.newest || "";
@@ -148,6 +158,7 @@ function makeNode(n, depth, showPath = false) {
   $(".tick", row).addEventListener("change", (e) =>
     select(el.dataset.path, e.target.dataset.state === "partial" ? true : e.target.checked));
   $(".info", row).addEventListener("click", () => showFiles(el.dataset.path));
+  $(".map", row).addEventListener("click", () => openFolderMap(el.dataset.path));
   return el;
 }
 
@@ -620,6 +631,51 @@ $("#settings-save").addEventListener("click", async (e) => {
     poll(true);
   } catch (err) {
     const p = $("#settings-error");
+    p.textContent = "Not saved: " + err.message;
+    p.hidden = false;
+  }
+});
+
+/* ---------------------------------------------------------------- folder map */
+function fmapRow(site = "", local = "") {
+  const r = document.createElement("div");
+  r.className = "fmap-row";
+  r.innerHTML = `<input class="f-site" placeholder="Acorn/Archimedes (*)" aria-label="Folder on the site">
+    <span class="arrow" aria-hidden="true">\u2192</span>
+    <input class="f-local" placeholder="Acorn/Archimedes" aria-label="Save in this folder">
+    <button type="button" class="btn icon" title="Remove this rule" aria-label="Remove rule">\u2715</button>`;
+  $(".f-site", r).value = site;
+  $(".f-local", r).value = local;
+  $("button", r).addEventListener("click", () => r.remove());
+  $("#fmap-rows").append(r);
+  return r;
+}
+async function openFolderMap(path) {
+  const { rules } = await api("/api/folder-map");
+  $("#fmap-rows").innerHTML = "";
+  let focus = null;
+  for (const r of rules) {
+    const el = fmapRow(r.site, r.local);
+    if (path && r.site.toLowerCase() === path.toLowerCase()) focus = el;
+  }
+  if (path && !focus) focus = fmapRow(path, path);      // a new rule for the folder clicked in the tree
+  $("#fmap-error").hidden = true;
+  $("#fmap-dlg").showModal();
+  if (focus) { const i = $(".f-local", focus); i.focus(); i.select(); }
+}
+$("#btn-fmap").addEventListener("click", () => openFolderMap(""));
+$("#fmap-add").addEventListener("click", () => $(".f-site", fmapRow()).focus());
+$("#fmap-save").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const rules = [...document.querySelectorAll("#fmap-rows .fmap-row")].map((r) =>
+    ({ site: $(".f-site", r).value.trim(), local: $(".f-local", r).value.trim() }));
+  try {
+    await api("/api/folder-map", { method: "POST", body: { rules } });
+    $("#fmap-dlg").close();
+    await refreshVisible();
+    poll(true);
+  } catch (err) {
+    const p = $("#fmap-error");
     p.textContent = "Not saved: " + err.message;
     p.hidden = false;
   }

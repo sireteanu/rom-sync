@@ -1,4 +1,6 @@
 """Unit tests: helpers, URL rules, link extraction."""
+import re
+
 import pytest
 
 from lolroms_sync.core.config import Config
@@ -88,9 +90,12 @@ def test_rel_path_mirrors_site_folders():
     assert r.rel_path("https://lolroms.com/?file=Atari%2F5200%2FGame+%28USA%29.7z") == "Atari/5200/Game (USA).7z"
     assert r.rel_path("https://lolroms.com/?file=..%2F..%2Fetc%2Fx.7z") == "etc/x.7z"   # no escaping the folder
     assert r.rel_path("https://h.com/roms/nes/A%3AB.zip") == "roms/nes/A_B.zip"
-    # folders named after a set's date are saved without it; file names are left alone
-    assert (r.rel_path("https://lolroms.com/?file=Acorn%2FRisc+PC+%28Flux%29+%2820230506-040449%29%2FX+%2820230506-040449%29.7z")
-            == "Acorn/Risc PC (Flux)/X (20230506-040449).7z")
+    # without a folder map, folders keep the site's names exactly (date stamps included)
+    url = "https://lolroms.com/?file=Acorn%2FRisc+PC+%28Flux%29+%2820230506-040449%29%2FSub%2FX+%2820230506-040449%29.7z"
+    assert r.rel_path(url) == "Acorn/Risc PC (Flux) (20230506-040449)/Sub/X (20230506-040449).7z"
+    from lolroms_sync.folder_map import FolderMap
+    fm = FolderMap([{"site": "acorn/risc pc (*)", "local": "Acorn/Risc PC: Flux"}])
+    assert r.rel_path(url, fm) == "Acorn/Risc PC_ Flux/Sub/X (20230506-040449).7z"   # names made safe
 
 
 def test_names_and_children():
@@ -132,3 +137,34 @@ def test_extract_include_nav_still_ignores_sortbar_and_back():
     assert "https://lolroms.com/?dir=Atari%2FNav" in links
     assert "https://lolroms.com/?dir=Atari%2FSort" not in links
     assert "https://lolroms.com/?dir=Atari%2FBack" not in links
+
+
+def test_folder_map_matching():
+    from lolroms_sync.folder_map import FolderMap
+    fm = FolderMap(FolderMap.clean([
+        {"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"},
+        {"site": "Acorn/*", "local": "Acorn/Other"},
+        {"site": "", "local": ""},                                   # empty dialog row: ignored
+    ]))
+    assert len(fm) == 2
+    assert fm.disk_folder("Acorn/Archimedes (20231029-220453)") == "Acorn/Archimedes"
+    assert fm.disk_folder("Acorn/ARCHIMEDES (20261001-000000)/Demos") == "Acorn/Archimedes/Demos"
+    assert fm.disk_folder("Acorn/Atom (Tapes)") == "Acorn/Other"       # first matching rule wins
+    assert fm.disk_folder("Acorn") == "Acorn" and fm.disk_folder("Atari/5200") == "Atari/5200"
+    assert fm.rule_at("Acorn/Archimedes (1)")["local"] == "Acorn/Archimedes"
+    assert fm.rule_at("Acorn/Archimedes (1)/Demos") is None            # only the mapped folder itself
+    assert FolderMap().disk_folder("A: B/C") == "A_ B/C"
+
+
+@pytest.mark.parametrize("rules, error", [
+    ([{"site": "", "local": "x"}], "enter the site folder"),
+    ([{"site": "Acorn", "local": ""}], "enter the folder to save it in"),
+    ([{"site": "Acorn", "local": "../x"}], "can't be . or .."),
+    ([{"site": "Acorn", "local": "A*"}], "only be used in the site folder"),
+    ([{"site": "Acorn", "local": "A"}, {"site": "acorn/", "local": "B"}], "twice"),
+    ("nope", "must be a list"),
+])
+def test_folder_map_rejects_bad_rules(rules, error):
+    from lolroms_sync.folder_map import FolderMap
+    with pytest.raises(ValueError, match=re.escape(error)):
+        FolderMap.clean(rules)

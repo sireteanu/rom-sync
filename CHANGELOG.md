@@ -5,6 +5,20 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.10] - 2026-10-19
+
+### New
+- **Folder map**: save a site folder, and everything in it, under a folder name of your choice.
+  Open it from the menu (☰ → Folder map) or with the arrow button on a folder's row. Use `*` for
+  any text, so `Acorn/Archimedes (*)` → `Acorn/Archimedes` keeps working when lolroms renames the
+  folder to a newer date. Several site folders can share one local folder. Mapped folders show
+  where they're saved in the tree.
+
+### Changed
+- Folder names are no longer shortened automatically (the date-stamp removal from 1.3.7 is gone):
+  without a Folder map rule, folders are saved under exactly the site's names again. Use a Folder
+  map rule for the folders you want named differently.
+
 ## [1.3.9] - 2026-10-19
 
 ### Fixed

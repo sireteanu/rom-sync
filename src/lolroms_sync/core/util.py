@@ -31,21 +31,6 @@ def safe_segment(name: str) -> str:
     return name
 
 
-# lolroms names many folders after the dump set's date: "Archimedes (20231029-220453)"
-_SET_DATE = re.compile(r"\s+\(\d{8}-\d{6}\)$")
-
-
-def local_folder(name: str) -> str:
-    """A site folder's name on disk: without the set's date stamp, so the folder keeps its name
-    when the site moves to a newer set ("Archimedes (20231029-220453)" -> "Archimedes")."""
-    return _SET_DATE.sub("", name) or name
-
-
-def local_rel(path: str) -> str:
-    """Folder path (no file name) as saved on disk: safe names, no date stamps."""
-    return "/".join(safe_segment(local_folder(s)) for s in path.split("/")) if path else ""
-
-
 def fs_path(path: str) -> str:
     """Absolute path; on Windows, long paths get the \\\\?\\ prefix so they still work."""
     path = os.path.abspath(path)

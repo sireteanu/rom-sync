@@ -377,32 +377,58 @@ def test_a_sync_with_nothing_to_do_writes_nothing_to_the_disk(site, app_factory,
     assert [w for w in writes if str(w[1]).endswith((".7z", ".zip"))] == []
 
 
-def test_folders_named_after_a_set_date_are_saved_without_it(site_factory, app_factory):
-    """lolroms names many folders after the set's date ("Archimedes (20231029-220453)"); files are
-    saved under the folder name without it, and Clean up doesn't count them as leftovers."""
-    from conftest import on_disk, scan, select, sync
+
+def test_folder_map_saves_site_folders_elsewhere(site_factory, app_factory):
+    """Folder map: a site folder (matched with *) is saved under another folder name; the tree
+    shows where; Clean up doesn't flag those files; removing the rule moves them back."""
+    from conftest import kids, on_disk, scan, select, sync
     site = site_factory("dated")
     c = app_factory(site)
     scan(c)
-    select(c, "Acorn/Archimedes (20231029-220453)")
+    dated = "Acorn/Archimedes (20231029-220453)"
+    select(c, dated)
+    r = c.post("/api/folder-map", json={"rules": [{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}]})
+    assert r.status_code == 200, r.text
+    assert c.get("/api/folder-map").json()["rules"] == [{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}]
+    assert kids(c, "Acorn")["Archimedes (20231029-220453)"]["saved_to"] == "Acorn/Archimedes"
+    assert kids(c)["Acorn"]["saved_to"] is None
     sync(c)
     assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z"}
     assert c.get("/api/cleanup").json()["files"] == []
     n = len(site.file_requests())
-    sync(c)                                                    # second sync: nothing to fetch
+    sync(c)                                                   # nothing new to fetch
     assert len(site.file_requests()) == n
+    # without the rule the file belongs in the site's folder again; the old copy is a leftover
+    assert c.post("/api/folder-map", json={"rules": []}).status_code == 200
+    sync(c)
+    assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z", f"{dated}/Zarch.7z"}
+    left = {f["path"]: f["reason"] for f in c.get("/api/cleanup").json()["files"]}
+    assert left == {"Acorn/Archimedes/Zarch.7z": "gone"}
 
 
-def test_old_catalog_paths_lose_the_set_date(tmp_path):
-    from lolroms_sync.catalog import Catalog
-    from lolroms_sync.core.sync import FileInfo
-    cat = Catalog(str(tmp_path / "catalog.db"))
-    d = "Acorn/Archimedes (20231029-220453)"
-    cat.add_dirs({"Acorn", d}, 1)
-    cat.page_scanned(d, "u", 1, [("https://x/?file=a.7z", "Zarch (20231029-220453).7z",
-                                  f"{d}/Zarch (20231029-220453).7z", FileInfo(ext=".7z"))])
-    cat.commit()
-    cat.db.close()
-    cat = Catalog(str(tmp_path / "catalog.db"))
-    (rel,), = cat.db.execute("SELECT rel FROM files").fetchall()
-    assert rel == "Acorn/Archimedes/Zarch (20231029-220453).7z"      # file names keep theirs
+def test_folder_map_bad_rules_are_refused(site, app_factory):
+    c = app_factory(site)
+    r = c.post("/api/folder-map", json={"rules": [{"site": "Acorn", "local": "../x"}]})
+    assert r.status_code == 400 and "can't be" in r.json()["error"]
+    # the generic settings endpoint can't change it behind the dialog's back
+    c.post("/api/settings", json={"folder_map": [{"site": "x", "local": "y"}]})
+    assert c.get("/api/folder-map").json()["rules"] == []
+
+
+def test_paths_from_1_3_7_are_put_back_at_start(site_factory, app_factory, tmp_path):
+    """1.3.7/1.3.8 saved folders without their date stamp; without a folder map rule the catalog
+    points at the site's folder names again after the update."""
+    import sqlite3
+    from conftest import scan
+    site = site_factory("dated")
+    c = app_factory(site)
+    scan(c)
+    c.__exit__(None, None, None)
+    db = sqlite3.connect(tmp_path / "config" / "catalog.db")
+    db.execute("UPDATE files SET rel='Acorn/Archimedes/Zarch.7z' WHERE name='Zarch.7z'")
+    db.commit()
+    db.close()
+    app_factory(site)
+    db = sqlite3.connect(tmp_path / "config" / "catalog.db")
+    assert db.execute("SELECT rel FROM files WHERE name='Zarch.7z'").fetchone()[0] == \
+        "Acorn/Archimedes (20231029-220453)/Zarch.7z"

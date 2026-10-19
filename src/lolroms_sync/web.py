@@ -33,7 +33,9 @@ def node_json(engine: Engine, tree: dict, rules: dict, path: str) -> dict:
             # the files directly in this folder (shown as their own row when it also has subfolders)
             "own_bytes": n.own_bytes, "own_newest": n.own_newest, "own_synced": n.own_synced,
             "own_synced_bytes": n.own_synced_bytes, "own_failed": n.own_failed,
-            "own_state": "on" if engine.catalog.effective_files(path, rules) else "off"}
+            "own_state": "on" if engine.catalog.effective_files(path, rules) else "off",
+            # set when a Folder map rule saves this folder somewhere else
+            "saved_to": engine.fmap.disk_folder(path) if engine.fmap.rule_at(path) else None}
 
 
 def create_app(engine_factory, password: Optional[str] = None, on_restart=None, on_shutdown=None) -> FastAPI:
@@ -168,6 +170,20 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
         try:
             return {"settings": eng().update_settings(values), "data_locked": eng().data_locked}
         except (ValueError, Exception) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @app.get("/api/folder-map")
+    async def get_folder_map():
+        return {"rules": eng().fmap.rules}
+
+    @app.post("/api/folder-map")
+    async def set_folder_map(body: dict = Body(...)):
+        try:
+            return eng().set_folder_map(body.get("rules"))
+        except RuntimeError:
+            return JSONResponse({"error": "Wait until the scan or sync has finished, then save again."},
+                                status_code=409)
+        except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
     @app.get("/api/history")

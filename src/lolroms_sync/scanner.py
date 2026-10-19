@@ -60,8 +60,9 @@ def url_for(base: str, path: str) -> str:
 class Scanner:
     def __init__(self, catalog: Catalog, base_url: str, client: httpx.AsyncClient, *,
                  workers: int = 8, delay: float = 0.1, retries: int = 2, timeout: float = 15.0,
-                 user_agent: str = "", robots: Optional[RobotFileParser] = None):
+                 user_agent: str = "", robots: Optional[RobotFileParser] = None, folder_map=None):
         self.catalog = catalog
+        self.folder_map = folder_map          # where files are saved (folder_map.FolderMap)
         self.base = base_url
         self.client = client
         self.workers = workers
@@ -171,7 +172,7 @@ class Scanner:
                 links = set(links) | header_dirs(body, final, rules)
             rows = []
             for furl, info in files.items():
-                rel = rules.rel_path(furl)
+                rel = rules.rel_path(furl, self.folder_map)
                 rows.append((furl, rel.rsplit("/", 1)[-1], rel, info))
             new = [l for l in links if l not in seen]
             seen.update(new)

@@ -7,7 +7,7 @@ from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 from .config import Config
 from .constants import SKIP_EXTENSIONS, TRACKING_PARAMS
-from .util import _fold, extension, local_folder, safe_segment
+from .util import _fold, extension, safe_segment
 
 
 class UrlRules:
@@ -94,7 +94,7 @@ class UrlRules:
                     return e
         return ""
 
-    def rel_path(self, url: str) -> str:
+    def rel_path(self, url: str, folder_map=None) -> str:
         """Where a file is saved, relative to the download folder.
         ?file=Atari%2F5200%2FGame.7z -> Atari/5200/Game.7z ; /roms/nes/Game.zip -> roms/nes/Game.zip"""
         p = urlsplit(url)
@@ -106,8 +106,10 @@ class UrlRules:
         if source is None:
             source = unquote(p.path)
         parts = [s for s in source.replace("\\", "/").split("/") if s.strip() not in ("", ".", "..")]
-        # folders lose the set's date stamp ("Archimedes (20231029-220453)" -> "Archimedes")
-        parts = [safe_segment(local_folder(s)) for s in parts[:-1]] + [safe_segment(s) for s in parts[-1:]]
+        folders = parts[:-1]
+        if folder_map is not None and folders:          # the page's Folder map (folder_map.py)
+            folders = folder_map.map_parts(folders)
+        parts = [safe_segment(s) for s in folders + parts[-1:] if s.strip() not in ("", ".", "..")]
         return "/".join(parts) or "download.bin"
 
     def crawlable(self, url: str) -> bool:

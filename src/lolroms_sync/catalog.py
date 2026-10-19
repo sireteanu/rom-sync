@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from typing import Iterable, Optional
 
 from .core.sync import size_range
-from .core.util import local_rel
 
 SYNCED_WORDS = ("new", "updated", "resumed", "up to date", "already in folder")
 
@@ -33,6 +32,7 @@ DEFAULT_SETTINGS = {
     "sync_every_hours": 0,          # 0 = off
     "full_scan_every_days": 7,      # 0 = off (only when sync schedule is on, or on its own)
     "data_dir": "",                 # set at start-up from --data unless changed in the UI
+    "folder_map": [],               # [{site, local}]: save site folders elsewhere (folder_map.py)
 }
 
 
@@ -85,7 +85,6 @@ class Catalog:
     def __init__(self, path: str):
         self.path = path
         self.existed = os.path.exists(path)      # False: a new, empty catalog was created
-        self.fixed_paths = 0                     # paths updated by _drop_set_dates() at this start
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.lock = threading.RLock()
@@ -115,26 +114,26 @@ class Catalog:
             CREATE INDEX IF NOT EXISTS changes_job ON changes(job, kind);
         """)
         self.db.execute("INSERT OR IGNORE INTO dirs(path, parent, name, depth) VALUES ('', NULL, '', 0)")
-        self._drop_set_dates()
         self.db.commit()
         self._tree: Optional[dict] = None
         self._tree_types = None
         self._tree_at = 0.0
         self.dirty = True
 
-    def _drop_set_dates(self) -> None:
-        """Catalogs from before 1.3.7 saved files under folder names with the set's date stamp
-        ("Archimedes (20231029-220453)"); point them at the folder name without it."""
-        fixes = []
-        for url, rel in self.db.execute("SELECT url, rel FROM files WHERE rel GLOB '*(*-*)*/*'"):
-            folder, _, name = rel.rpartition("/")
-            new = f"{local_rel(folder)}/{name}"
-            if new != rel:
-                fixes.append((new, url))
-        self.fixed_paths = len(fixes)
+    def remap(self, rel_of) -> int:
+        """Folder map changed (or a catalog from 1.3.7/1.3.8): work out every file's place on disk
+        again with rel_of(url). Files that move are planned afresh by the next sync (a copy already
+        at the new place is adopted by its size). -> number of files whose place changed."""
+        with self.lock:
+            fixes = [(new, url) for url, rel in self.db.execute("SELECT url, rel FROM files")
+                     if (new := rel_of(url)) != rel]
+            if fixes:
+                self.db.executemany("UPDATE files SET rel=?, local=NULL, local_size=NULL, synced=NULL "
+                                    "WHERE url=?", fixes)
+                self.db.commit()
         if fixes:
-            self.db.executemany("UPDATE files SET rel=?, local=NULL, local_size=NULL, synced=NULL "
-                                "WHERE url=?", fixes)
+            self.invalidate()
+        return len(fixes)
 
     def invalidate(self) -> None:
         """Structural change (ticks, a finished scan, settings): rebuild the tree on next read."""

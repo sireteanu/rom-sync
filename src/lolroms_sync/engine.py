@@ -23,6 +23,8 @@ from .core.util import fmt_bytes, parse_size
 
 from . import __version__
 from .catalog import Catalog
+from .core.urls import UrlRules
+from .folder_map import FolderMap
 from .scanner import Scanner
 
 log = logging.getLogger("dircrawl")
@@ -88,6 +90,8 @@ class Engine:
         log.addHandler(self.logbuf)
         log.setLevel(logging.DEBUG)
         self._keep_romm_settings()            # after the log is set up, so it shows in the page
+        self.fmap = FolderMap(FolderMap.clean(self.catalog.settings().get("folder_map") or []))
+        self._remap(at_start=True)
         self._log_startup()
         self.job: Optional[dict] = None
         self.task: Optional[asyncio.Task] = None
@@ -104,6 +108,31 @@ class Engine:
         self.next_run: Optional[float] = None
         self.shutting_down = False
         self.leftovers: Optional[dict] = None   # Clean up summary from the last check
+
+    # ------------------------------------------------------------------ folder map
+    def rel_of(self, url: str) -> str:
+        """Where a file URL is saved, relative to the download folder (with the folder map)."""
+        if getattr(self, "_rules", None) is None:
+            self._url_rules = UrlRules(Config(start_url=self.base, keep_params=frozenset({"dir"})))
+        return self._url_rules.rel_path(url, self.fmap)
+
+    def _remap(self, at_start: bool = False) -> int:
+        n = self.catalog.remap(self.rel_of)
+        if n:
+            log.info("Folder map: %d files now have a different place in the download folder%s", n,
+                     "" if at_start else " - the next sync puts them there")
+        return n
+
+    def set_folder_map(self, rules) -> dict:
+        """Rules from the page's Folder map dialog. ValueError says what to fix."""
+        if self.busy:
+            raise RuntimeError("busy")
+        clean = FolderMap.clean(rules)
+        self.catalog.save_settings({"folder_map": clean})
+        self.fmap = FolderMap(clean)
+        log.info("Folder map saved: %d %s", len(clean), "rule" if len(clean) == 1 else "rules")
+        moved = self._remap()
+        return {"rules": clean, "moved": moved}
 
     def _log_startup(self) -> None:
         """Say which catalog and download folder this start uses and what's in them, so a wrong
@@ -129,8 +158,6 @@ class Engine:
             log.warning("Catalog: %s did not exist - started a new, empty catalog", cat.path)
         log.info("Catalog has %d folders, %d files (%s), %d ticked folders; %s",
                  c["dirs"], c["files"], fmt_bytes(c["bytes"]), ticks, scanned)
-        if cat.fixed_paths:
-            log.info("Catalog: %d file paths now use folder names without the set's date", cat.fixed_paths)
 
         data = self.data_dir
         manifest = os.path.join(data, MANIFEST_NAME)
@@ -186,7 +213,7 @@ class Engine:
             if k == "outage_wait_hours":
                 v = max(0.0, float(v or 0))
                 v = int(v) if v == int(v) else v
-            if k in ("interrupted_job",):
+            if k in ("interrupted_job", "folder_map"):      # folder_map: set_folder_map() only
                 continue
             if k in ("refresh_before_sync", "check_remote", "resume_interrupted"):
                 v = bool(v)
@@ -293,7 +320,8 @@ class Engine:
             if self.stop_requested:
                 break
             self.scanner = Scanner(self.catalog, self.base, client, workers=self.scan_workers,
-                                   delay=self.scan_delay, user_agent=USER_AGENT, robots=robots)
+                                   delay=self.scan_delay, user_agent=USER_AGENT, robots=robots,
+                                   folder_map=self.fmap)
             out[r or "/"] = await self.scanner.run(r)
         return out
 
@@ -468,7 +496,7 @@ class Engine:
         types = parse_types(s["types"])
         # walking the folder and judging tens of thousands of files takes a moment: do it in a
         # worker thread so the web page stays responsive (the catalog is safe to read from there)
-        files = await asyncio.to_thread(lambda: cleanup.find(self.catalog, types, cleanup.walk(s["data_dir"])))
+        files = await asyncio.to_thread(lambda: cleanup.find(self.catalog, types, cleanup.walk(s["data_dir"]), self.fmap))
         self.leftovers = dict(cleanup.summary(files), checked=time.time())
         return files
 

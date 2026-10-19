@@ -82,9 +82,21 @@ Click **Sync selected**. Rom Sync:
 Run it again any time - it only ever fetches what's missing or changed. If you copied files into
 the download folder yourself, Rom Sync recognises them (by size) and doesn't download them again.
 
-Many folders on lolroms carry the date of their set, like *Archimedes (20231029-220453)*. Rom Sync
-saves them without it (*Archimedes*), so your folders keep the same name when the site updates a
-set. File names are kept exactly as on the site.
+**Saving a folder under another name (Folder map).** Many folders on lolroms carry the date of their
+set, like *Archimedes (20231029-220453)*, and the site renames them when a newer set arrives. To keep
+your own folder names, click the arrow button at the end of the folder's row (or ☰ → **Folder map**)
+and say where it goes, for example:
+
+| Folder on the site | Save in this folder |
+|---|---|
+| `Acorn/Archimedes (*)` | `Acorn/Archimedes` |
+| `Acorn/Risc PC (*)` | `Acorn/Risc PC` |
+
+`*` stands for any text, so the rule still works after the site changes the date. Subfolders follow
+their folder, file names stay as on the site, and the first rule that matches wins. The tree shows
+"→ Acorn/Archimedes" next to a mapped folder. Files you already downloaded aren't moved: move them
+into the new folder yourself before the next sync (Rom Sync recognises them by size), or let the sync
+download them again and remove the old copies with Clean up.
 
 Every downloaded file gets the **date shown on the website**, so you can sort by date in your file
 manager to see what's new; folders get the date of their newest file. Files get permissions **777**

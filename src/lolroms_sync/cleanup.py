@@ -18,7 +18,8 @@ import os
 from typing import Optional
 
 from .core.sync import MANIFEST_NAME, Manifest
-from .core.util import fmt_bytes, fs_path, local_rel
+from .core.util import fmt_bytes, fs_path
+from .folder_map import FolderMap
 
 log = logging.getLogger("dircrawl")
 
@@ -60,18 +61,17 @@ def walk(root: str) -> list:
     return out
 
 
-def sanitized(path: str) -> str:
-    return local_rel(path)
-
-
-def find(catalog, types, disk: list) -> list:
+def find(catalog, types, disk: list, folder_map: Optional[FolderMap] = None) -> list:
     """Judge the files found on disk -> [{path, size, reason}] (on the event loop thread)."""
     tree = catalog.tree(types)
     rules = catalog.rules()
     full = catalog.last_scan("full")
     full_done = bool(full and full.get("status") == "done")
-    by_disk = {sanitized(p): p for p in tree}            # folder on disk -> catalog folder
-    listed = catalog.files_by_rel({by_disk[d] for d, _, _ in disk if d in by_disk})
+    fmap = folder_map or FolderMap()
+    by_disk: dict = {}                                   # folder on disk -> catalog folders saved there
+    for p in tree:
+        by_disk.setdefault(fmap.disk_folder(p), []).append(p)
+    listed = catalog.files_by_rel({p for d, _, _ in disk for p in by_disk.get(d, ())})
 
     # both answers depend only on the folder, so work them out once per folder, not once per file
     readable_cache: dict = {}
@@ -87,14 +87,19 @@ def find(catalog, types, disk: list) -> list:
         have been read without errors (for the site root: a finished full scan)."""
         d = disk_dir
         while True:
-            path = by_disk.get(d)
-            if path is not None:
-                node = tree[path]
-                if node.error:
-                    return False
-                if path == "":
-                    return full_done
-                return bool(node.scanned)            # its listing shows what's still there
+            paths = by_disk.get(d)
+            if paths:
+                # every site folder saved here must have been read (several can share one folder)
+                for path in paths:
+                    node = tree[path]
+                    if node.error:
+                        return False
+                    if path == "":
+                        if not full_done:
+                            return False
+                    elif not node.scanned:               # its listing shows what's still there
+                        return False
+                return True
             if not d:
                 return full_done
             d = d.rsplit("/", 1)[0] if "/" in d else ""
