@@ -11,9 +11,10 @@ from typing import Optional
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import __version__
 from .catalog import OWN
 from .engine import Engine, parse_types
 
@@ -82,7 +83,13 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
 
     @app.get("/")
     async def index():
-        return FileResponse(os.path.join(STATIC, "index.html"), headers={"Cache-Control": "no-cache"})
+        # the page asks for its script and styles by version, so a browser never runs an old
+        # cached app.js against a newer page after an update
+        with open(os.path.join(STATIC, "index.html"), encoding="utf-8") as f:
+            html = f.read()
+        for name in ("app.js", "app.css"):
+            html = html.replace(f'"/static/{name}"', f'"/static/{name}?v={__version__}"')
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 

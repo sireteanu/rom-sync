@@ -5,6 +5,14 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-10-19
+
+### Fixed
+- **After an update the page could stay empty** ("Lost contact with Rom Sync", no folders, no log)
+  because the browser kept running the previous version's script. The page now loads its script and
+  styles by version, so each update fetches them fresh. If you see this on an older version, press
+  Ctrl+F5 once.
+
 ## [1.3.8] - 2026-10-19
 
 ### Improved

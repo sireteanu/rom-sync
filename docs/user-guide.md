@@ -208,6 +208,9 @@ ticking its subfolders leaves its own files out).
 
 **"Paused: …" during a sync.** The site's daily limit was reached; the next sync continues.
 
+**The page is empty or says "Lost contact with Rom Sync" right after an update** (versions before
+1.3.9): your browser is still using the old version's script. Press **Ctrl+F5** once.
+
 **The folder list is empty after an update.** Rom Sync started with a new catalog, so it can't see
 the old one. The log's first lines say which catalog it uses and warn if the download folder
 already has files. Check that the container's `/config` mapping points at the folder with your

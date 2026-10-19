@@ -298,3 +298,11 @@ def test_startup_log_says_which_catalog_and_download_folder_are_used(site, app_f
     assert "did not exist - started a new, empty catalog" in lines
     assert "Download folder:" in lines and "Atari" in lines
     assert "The catalog is empty but the download folder already has files" in lines
+
+
+def test_page_asks_for_its_script_by_version(site, app_factory):
+    from lolroms_sync import __version__
+    c = app_factory(site)
+    html = c.get("/").text
+    assert f'/static/app.js?v={__version__}"' in html and f'/static/app.css?v={__version__}"' in html
+    assert c.get(f"/static/app.js?v={__version__}").status_code == 200
