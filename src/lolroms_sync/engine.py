@@ -18,7 +18,7 @@ from .core.config import Config
 from .core.constants import ARCHIVE_EXTENSIONS, DOWNLOAD_EXTENSIONS
 from .core.download import Downloader, run_item
 from .core.limits import DownloadGate, RateLimit
-from .core.sync import FileInfo, Manifest, size_range, stamp_folders
+from .core.sync import MANIFEST_NAME, FileInfo, Manifest, size_range, stamp_folders
 from .core.util import fmt_bytes, parse_size
 
 from . import __version__
@@ -88,6 +88,7 @@ class Engine:
         log.addHandler(self.logbuf)
         log.setLevel(logging.DEBUG)
         self._keep_romm_settings()            # after the log is set up, so it shows in the page
+        self._log_startup()
         self.job: Optional[dict] = None
         self.task: Optional[asyncio.Task] = None
         self.scanner: Optional[Scanner] = None
@@ -103,6 +104,52 @@ class Engine:
         self.next_run: Optional[float] = None
         self.shutting_down = False
         self.leftovers: Optional[dict] = None   # Clean up summary from the last check
+
+    def _log_startup(self) -> None:
+        """Say which catalog and download folder this start uses and what's in them, so a wrong
+        folder mapping (an empty catalog after an update) is easy to spot in the log."""
+        cat = self.catalog
+        try:
+            st = os.stat(cat.path)
+            when = time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))
+            size = fmt_bytes(st.st_size)
+        except OSError:
+            when, size = "?", "?"
+        c = cat.counts()
+        ticks = sum(1 for v in cat.rules().values() if v)
+        full = cat.last_scan("full")
+        if full:
+            scanned = "last full scan %s (%s)" % (
+                time.strftime("%Y-%m-%d %H:%M", time.localtime(full.get("started") or 0)), full.get("status"))
+        else:
+            scanned = "no full scan yet"
+        if cat.existed:
+            log.info("Catalog: %s (%s, last changed %s)", cat.path, size, when)
+        else:
+            log.warning("Catalog: %s did not exist - started a new, empty catalog", cat.path)
+        log.info("Catalog has %d folders, %d files (%s), %d ticked folders; %s",
+                 c["dirs"], c["files"], fmt_bytes(c["bytes"]), ticks, scanned)
+        if cat.fixed_paths:
+            log.info("Catalog: %d file paths now use folder names without the set's date", cat.fixed_paths)
+
+        data = self.data_dir
+        manifest = os.path.join(data, MANIFEST_NAME)
+        try:
+            with os.scandir(data) as it:
+                entries = [e.name for e in it if not e.name.startswith(".")]
+            log.info("Download folder: %s (%d items at the top%s; download record %s)", data, len(entries),
+                     ": " + ", ".join(sorted(entries)[:8]) + (" ..." if len(entries) > 8 else "") if entries else "",
+                     "found" if os.path.exists(manifest) else "not found")
+        except FileNotFoundError:
+            entries = []
+            log.warning("Download folder: %s does not exist yet", data)
+        except OSError as e:
+            entries = []
+            log.warning("Download folder: %s can't be read (%s)", data, e)
+        if not c["dirs"] and (entries or os.path.exists(manifest)):
+            log.warning("The catalog is empty but the download folder already has files. If Rom Sync "
+                        "ran before, check that the config folder mapping (%s) points at the folder that "
+                        "holds your old catalog.db - your ticks are stored there.", self.config_dir)
 
     def _keep_romm_settings(self) -> None:
         """The RomM Mapper moved to ROM Mapper (1.3.5). Choices made here are left in
@@ -171,6 +218,9 @@ class Engine:
             # remembered until the sync ends on its own or is stopped, so a sync cut off by a
             # crash, reboot or app restart carries on (and resumes its .part files) at next start
             self.catalog.save_settings({"interrupted_job": kind})
+        what = {"scan": "site scan" if not root else f"scan of {root}", "sync": "sync",
+                "scan+sync": "site scan + sync"}.get(kind, kind)
+        log.info("Starting %s (%s)", what, "scheduled" if scheduled else "requested")
         self.task = asyncio.create_task(self._run(kind, root))
         return True
 

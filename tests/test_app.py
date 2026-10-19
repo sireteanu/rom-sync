@@ -287,3 +287,14 @@ def test_replies_are_compressed_and_a_hidden_page_stops_asking(site, app_factory
     small = c.get("/api/health", headers={"Accept-Encoding": "gzip"})
     assert small.headers.get("content-encoding") is None           # tiny replies stay as they are
     assert c.get("/api/tree", headers={"Accept-Encoding": "gzip"}).json()  # still reads fine
+
+
+def test_startup_log_says_which_catalog_and_download_folder_are_used(site, app_factory, tmp_path):
+    """An empty catalog next to a download folder with files gets a warning about the mapping."""
+    (tmp_path / "data" / "Atari").mkdir(parents=True)
+    c = app_factory(site)
+    lines = " ".join(l["msg"] if isinstance(l, dict) else str(l)
+                     for l in c.get("/api/status", params={"log_since": 0}).json().get("log", []))
+    assert "did not exist - started a new, empty catalog" in lines
+    assert "Download folder:" in lines and "Atari" in lines
+    assert "The catalog is empty but the download folder already has files" in lines

@@ -84,6 +84,8 @@ class Node:
 class Catalog:
     def __init__(self, path: str):
         self.path = path
+        self.existed = os.path.exists(path)      # False: a new, empty catalog was created
+        self.fixed_paths = 0                     # paths updated by _drop_set_dates() at this start
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.lock = threading.RLock()
@@ -129,6 +131,7 @@ class Catalog:
             new = f"{local_rel(folder)}/{name}"
             if new != rel:
                 fixes.append((new, url))
+        self.fixed_paths = len(fixes)
         if fixes:
             self.db.executemany("UPDATE files SET rel=?, local=NULL, local_size=NULL, synced=NULL "
                                 "WHERE url=?", fixes)

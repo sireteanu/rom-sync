@@ -296,7 +296,7 @@ answers like Rom Sync, a new start just opens the running copy; otherwise it exp
 | Where | What |
 |---|---|
 | `<config>/catalog.db` | SQLite (WAL): `dirs`, `files` (listing date/size, local state), `selection` (rules), `settings`, `scans`, `history`, `changes` (per-file change history: time, local day, sync id = its start time, kind new/updated/resumed/failed/deleted, path, size, note; pruned after 365 days) |
-| `<config>/rom-sync.log` | Log (rotating, 2 MB × 3) |
+| `<config>/rom-sync.log` | Log (rotating, 2 MB × 3). Each start logs the catalog path, size and contents (folders, files, ticks, last full scan) and the download folder's top-level items; a warning when the catalog is new or empty but the download folder isn't (wrong `/config` mapping) |
 | `<config>/romm-mapper.json` | RomM Mapper choices from before 1.3.5, kept for copying to ROM Mapper |
 | `<data>/<site path>` | Synced files, same folder structure as the site (`Nintendo/Super Famicom/…`), except that a folder's set date is left out (`Archimedes (20231029-220453)` is saved as `Archimedes`) |
 | `<data>/.dir_crawler.db` | Manifest: what the listing said for each saved file, Last-Modified/ETag, per-site parallel limit |

@@ -5,6 +5,15 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-10-19
+
+### Improved
+- **Clearer log at start**: Rom Sync now writes which catalog and download folder it uses, how many
+  folders, files and ticks the catalog holds, when the last full scan ran, and what's in the
+  download folder. If the catalog is new or empty while the download folder already has files, the
+  log warns that the config folder mapping probably points at the wrong place.
+- Every scan or sync that starts is logged, with whether you started it or the schedule did.
+
 ## [1.3.7] - 2026-10-19
 
 ### Changed
