@@ -123,7 +123,21 @@ class Engine:
                 places.setdefault(k, v)
             self.catalog.save_settings({"folder_places": places, "folder_map": [], "folder_names": {}})
             log.info("Saved as: %d folder settings taken over from the Folder map", len(p2))
-        return FolderMap(places, kids)
+        if kids:
+            # 1.4.3-1.4.5 had "where its subfolders go"; the column's full paths replaced it. Give
+            # each affected subfolder its current place as its own, so nothing moves on disk.
+            old = FolderMap(places, kids)
+            low = {k.casefold() for k in kids}
+            have = {k.casefold() for k in places}
+            n = 0
+            for folder in self.catalog.tree(None):
+                if folder and parent_of(folder).casefold() in low and folder.casefold() not in have:
+                    places[folder] = "/" + old.disk_folder(folder)
+                    n += 1
+            self.catalog.save_settings({"folder_places": places, "folder_kids": {}})
+            log.info("Saved as: %d subfolders keep their place as their own Saved as "
+                     "(the subfolders setting is gone)", n)
+        return FolderMap(places, {})
 
     def rel_of(self, url: str) -> str:
         """Where a file URL is saved, relative to the download folder ("Saved as" applied)."""
@@ -139,8 +153,9 @@ class Engine:
         return n
 
     def set_place(self, path: str, place, kids: bool = False) -> dict:
-        """The tree's "Saved as" column: where this site folder goes (kids=False), or where its
-        subfolders go (kids=True). "" = the default. ValueError says what to fix."""
+        """The tree's "Saved as" column: where this site folder goes. "" = the default.
+        ValueError says what to fix. (kids=True, where its subfolders go, is no longer offered in
+        the page but still works for the API.)"""
         if self.busy:
             raise RuntimeError("busy")
         path = (path or "").strip("/")

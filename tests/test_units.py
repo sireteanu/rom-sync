@@ -188,3 +188,16 @@ def test_old_folder_map_rules_and_names_are_taken_over():
         ["", "Acorn", "Acorn/Archimedes (2023)", "Atari", "Atari/2600", "SEGA (1)", "SEGA (1)/Saturn"])
     assert places == {"Atari/2600": "VCS", "Acorn/Archimedes (2023)": "/Acorn/Archimedes", "SEGA (1)": "/SEGA"}
     assert kids == {}
+
+
+def test_ticking_keeps_the_cached_tree(tmp_path):
+    from lolroms_sync.catalog import Catalog
+    cat = Catalog(str(tmp_path / "catalog.db"))
+    cat.add_dirs({"Atari", "Atari/2600", "Atari/5200"}, 1)
+    cat.commit()
+    t = cat.tree(None)
+    cat.select("Atari/2600", True)
+    cat.select("Atari/2600/.", True)
+    cat.clear_selection()
+    assert cat.tree(None, max_age=0) is t
+    assert cat.has_dir("Atari/5200") and cat.has_dir("") and not cat.has_dir("Nope")

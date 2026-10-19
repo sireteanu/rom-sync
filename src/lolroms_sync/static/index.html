@@ -76,7 +76,7 @@
       <button id="btn-clear-sel" class="btn small ghost" title="Untick everything">Clear selection</button>
     </div>
     <div class="cols">
-      <button class="sort c-name" data-sort="name" title="Sort by name">Folder</button><span class="c-as" title="Where each folder goes in your download folder. Type another path and press Enter, e.g. /Apple II. Subfolders follow their folder. The arrow button sets where a folder's subfolders go.">Saved as</span><button class="sort c-num c-files" data-sort="files" title="Sort by number of files">Files</button><button class="sort c-num c-size" data-sort="bytes" title="Sort by size">Size</button>
+      <button class="sort c-name" data-sort="name" title="Sort by name">Folder</button><span class="c-as" title="Where each folder goes in your download folder. Type another path and press Enter, e.g. /Apple II. Subfolders follow their folder.">Saved as</span><button class="sort c-num c-files" data-sort="files" title="Sort by number of files">Files</button><button class="sort c-num c-size" data-sort="bytes" title="Sort by size">Size</button>
       <button class="sort c-date" data-sort="newest" title="Sort by the newest file's date">Updated</button><button class="sort c-meter" data-sort="synced" title="Sort by how much is synced">Synced</button>
     </div>
     <div id="tree" class="tree" role="tree"></div>
@@ -165,21 +165,6 @@
   </form>
 </dialog>
 
-<dialog id="kids-dlg" class="dlg">
-  <form id="kids-form" method="dialog">
-    <div class="dlg-head"><h2>Where its subfolders go</h2><button class="btn icon" value="cancel" aria-label="Close">✕</button></div>
-    <p class="hint">Each subfolder of <b id="kids-folder"></b> keeps its own name, including subfolders the site
-      adds later. Its own files stay where the folder is.</p>
-    <label class="field"><span>Put its subfolders in</span>
-      <input name="place" id="kids-place" spellcheck="false" autocomplete="off" placeholder="Inside the folder, as usual">
-      <small><code>/</code> = straight in the download folder &nbsp;·&nbsp; <code>/Sega/32X Extras</code> = that folder
-        (counted from the download folder) &nbsp;·&nbsp; <code>Extras</code> = a folder inside this one &nbsp;·&nbsp;
-        empty = inside the folder, as on the site</small></label>
-    <p id="kids-error" class="error" hidden></p>
-    <div class="dlg-foot"><button class="btn ghost" value="cancel">Cancel</button><button class="btn primary" id="kids-save" value="save">Save</button></div>
-  </form>
-</dialog>
-
 <dialog id="list-dlg" class="dlg wide">
   <form method="dialog" class="dlg-head"><h2 id="list-title">Files</h2><button class="btn icon" aria-label="Close">✕</button></form>
   <p id="list-sub" class="muted small"></p>
@@ -225,7 +210,7 @@
       <button class="twisty" aria-label="Expand"></button>
       <input type="checkbox" class="tick">
       <span class="name"></span>
-      <span class="c-as"><input class="as" list="romm-list" spellcheck="false" autocomplete="off"><span class="romm-tag" hidden></span><button class="nodate" type="button" title="Save it without the date" aria-label="Remove the date from the name" hidden>&minus;date</button><button class="subs-btn" type="button" aria-label="Where its subfolders go" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v12h12m0 0-3-3m3 3-3 3"/></svg></button></span>
+      <span class="c-as"><input class="as" list="romm-list" spellcheck="false" autocomplete="off"><span class="romm-tag" hidden></span><button class="nodate" type="button" title="Save it without the date" aria-label="Remove the date from the name" hidden>&minus;date</button></span>
       <span class="c-num files"></span>
       <span class="c-num size"></span>
       <span class="c-date date"></span>

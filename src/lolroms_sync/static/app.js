@@ -189,13 +189,6 @@ function updateRommTag(row) {
 function fillSavedAs(row, n) {
   const input = $(".as", row);
   if (!input) return;
-  const kb = $(".subs-btn", row);
-  kb.hidden = !n.has_children;
-  kb.classList.toggle("on", !!n.kids_to);
-  kb.title = n.kids_to
-    ? `Its subfolders go to ${n.kids_to === "/" ? "the download folder" : n.kids_to} - click to change`
-    : "Where its subfolders go (they stay inside it now)";
-  kb._kids = n.kids_to || "";
   if (document.activeElement === input) return;     // don't overwrite while typing
   input.value = "/" + (n.disk_path || "");
   input.dataset.orig = input.value;
@@ -241,10 +234,6 @@ function wireSavedAs(el) {
   });
   input.addEventListener("blur", () => {
     if (!input.classList.contains("saving") && asFullPath(input.value) !== input.dataset.orig) saveName(el, input, input.value);
-  });
-  $(".subs-btn", row).addEventListener("click", (e) => {
-    e.stopPropagation();
-    openKids(el.dataset.path, e.currentTarget._kids);
   });
   $(".nodate", row).addEventListener("click", (e) => {
     e.stopPropagation();
@@ -334,7 +323,17 @@ async function renderRoot() {
 }
 
 /* refresh the numbers of every visible row without rebuilding the tree */
+/* Quick clicking: ticks are saved one after another in click order, and a re-read of the tree only
+   updates rows when no newer click happened while it ran - otherwise an older answer could put back a
+   tick you had just changed. One re-read follows the last click. */
+let selEpoch = 0;                 // +1 on every click
+let selQueue = Promise.resolve();
+let selPending = 0;
+let selRefreshTimer = null;
+
 async function refreshVisible() {
+  if (selPending) return;         // more ticks are on their way; the re-read after them shows all
+  const epoch = selEpoch;
   if (searchMode) return runSearch();
   const parents = new Set([""]);
   for (const p of open) parents.add(p);
@@ -342,6 +341,7 @@ async function refreshVisible() {
     if (p !== "" && !nodes.has(p)) continue;
     let data;
     try { data = await api(`/api/tree?path=${encodeURIComponent(p)}`); } catch { continue; }
+    if (epoch !== selEpoch || selPending) return;    // a newer click: its own re-read follows
     const container = p === "" ? tree : $(":scope > .kids", nodes.get(p));
     const own = container.querySelector(":scope > .own-files");
     if (own) fillOwnRow(own, data.node, Number(own.firstElementChild.style.getPropertyValue("--depth")));
@@ -361,12 +361,20 @@ async function refreshVisible() {
   }
 }
 
-async function select(path, include) {
-  try {
-    await api("/api/select", { method: "POST", body: { path, include } });
-  } catch (e) { alert("Could not change the selection: " + e.message); }
-  await refreshVisible();
-  poll(true);
+function select(path, include) {
+  selEpoch++;
+  selPending++;
+  clearTimeout(selRefreshTimer);
+  selQueue = selQueue.then(async () => {
+    try {
+      await api("/api/select", { method: "POST", body: { path, include } });
+    } catch (e) { alert("Could not change the selection: " + e.message); }
+    selPending--;
+    if (!selPending) {
+      selRefreshTimer = setTimeout(async () => { await refreshVisible(); poll(true); }, 150);
+    }
+  });
+  return selQueue;
 }
 
 /* ---------------------------------------------------------------- search */
@@ -721,30 +729,6 @@ $("#settings-save").addEventListener("click", async (e) => {
     poll(true);
   } catch (err) {
     const p = $("#settings-error");
-    p.textContent = "Not saved: " + err.message;
-    p.hidden = false;
-  }
-});
-
-/* ---------------------------------------------------------------- where subfolders go */
-let kidsPath = null;
-function openKids(path, current) {
-  kidsPath = path;
-  $("#kids-folder").textContent = path;
-  $("#kids-place").value = current || "";
-  $("#kids-error").hidden = true;
-  $("#kids-dlg").showModal();
-  $("#kids-place").focus();
-}
-$("#kids-save").addEventListener("click", async (e) => {
-  e.preventDefault();
-  try {
-    await api("/api/folder-kids", { method: "POST", body: { path: kidsPath, place: $("#kids-place").value } });
-    $("#kids-dlg").close();
-    await refreshVisible();
-    poll(true);
-  } catch (err) {
-    const p = $("#kids-error");
     p.textContent = "Not saved: " + err.message;
     p.hidden = false;
   }

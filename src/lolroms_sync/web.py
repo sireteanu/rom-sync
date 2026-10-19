@@ -39,18 +39,16 @@ def node_json(engine: Engine, tree: dict, rules: dict, path: str) -> dict:
 
 def _saved_as(engine: Engine, path: str) -> dict:
     """The tree's "Saved as" column: what the field shows (the folder's own setting, or its site
-    name), its whole place on disk, and where its subfolders go."""
+    name), and its whole place on disk."""
     if not path:
-        return {"place": "", "custom": False, "disk_path": "", "moved": False,
-                "kids_to": engine.fmap.kids_of("")}
+        return {"place": "", "custom": False, "disk_path": "", "moved": False}
     fm = engine.fmap
     disk = fm.disk_folder(path)
     parent = path.rsplit("/", 1)[0] if "/" in path else ""
     place = fm.place_of(path)
     return {"place": place or path.rsplit("/", 1)[-1], "custom": bool(place), "disk_path": disk,
             # not in its parent's folder on disk (its own / path, or its parent's subfolder setting)
-            "moved": (disk.rsplit("/", 1)[0] if "/" in disk else "") != fm.disk_folder(parent),
-            "kids_to": fm.kids_of(path)}
+            "moved": (disk.rsplit("/", 1)[0] if "/" in disk else "") != fm.disk_folder(parent)}
 
 
 def create_app(engine_factory, password: Optional[str] = None, on_restart=None, on_shutdown=None) -> FastAPI:
@@ -148,7 +146,7 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
     async def select(path: str = Body(...), include: bool = Body(...)):
         e = eng()
         folder = path[:-len(OWN)] if path.endswith(OWN) else path     # "<folder>/." = its own files
-        if folder not in e.catalog.tree() or (path.endswith(OWN) and not folder):
+        if not e.catalog.has_dir(folder) or (path.endswith(OWN) and not folder):
             raise HTTPException(404, "no such folder")
         e.catalog.select(path, include)
         return {"ok": True}
@@ -199,10 +197,6 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
     @app.post("/api/folder-place")
     async def folder_place(body: dict = Body(...)):
         return await _place(body, kids=False)
-
-    @app.post("/api/folder-kids")
-    async def folder_kids(body: dict = Body(...)):
-        return await _place(body, kids=True)
 
     @app.get("/api/history")
     async def history():

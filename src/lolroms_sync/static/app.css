@@ -165,13 +165,7 @@ h2 { font-size: 15px; font-weight: 600; }
 .row:hover .nodate, .nodate:focus-visible { opacity: 1; }
 .nodate:hover { color: var(--grape-ink); border-color: var(--grape-ink); }
 .nodate[hidden] { display: none; }
-.subs-btn { flex: none; border: 0; background: none; color: var(--ink-2); cursor: pointer; padding: 2px; border-radius: var(--radius-s); opacity: 0; }
-.subs-btn svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2; fill: none; display: block; }
-.row:hover .subs-btn, .subs-btn:focus-visible, .subs-btn.on { opacity: 1; }
-.subs-btn.on { color: var(--teal); }
-.subs-btn:hover { color: var(--grape-ink); }
-.subs-btn[hidden] { display: none; }
-.node.own-files .c-as > * { visibility: hidden; }
+.row:hover .node.own-files .c-as > * { visibility: hidden; }
 .hint { color: var(--ink-2); font-size: 13px; margin: 0 0 12px; }
 .hint code { background: var(--field); padding: 1px 4px; border-radius: 3px; }
 .info { border: 0; background: none; color: var(--ink-2); cursor: pointer; padding: 4px; border-radius: var(--radius-s); }

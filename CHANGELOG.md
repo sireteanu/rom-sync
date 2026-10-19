@@ -5,6 +5,20 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.6] - 2026-10-19
+
+### Fixed
+- **Ticking several folders quickly no longer loses ticks.** A box could flip back by itself for a
+  few seconds (and a second click then really unticked it), because each tick rebuilt the whole
+  folder tree on the server and an older refresh of the page could arrive after a newer tick. Ticks
+  are now saved one after another, the page only redraws after the last one, and ticking no longer
+  rebuilds the tree, so each click is quick.
+
+### Removed
+- The "where its subfolders go" button next to Saved as. Type the full path you want for a
+  subfolder instead. If you used it, each affected subfolder keeps its current place as its own
+  Saved as, so nothing moves.
+
 ## [1.4.5] - 2026-10-19
 
 ### New

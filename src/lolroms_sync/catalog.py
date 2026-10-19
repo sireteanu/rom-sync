@@ -380,7 +380,9 @@ class Catalog:
 
     def select(self, path: str, include: bool) -> None:
         """Tick / untick a folder: applies to everything below it, including folders added later.
-        "<folder>/." ticks only the files directly in that folder, not its subfolders."""
+        "<folder>/." ticks only the files directly in that folder, not its subfolders.
+        Ticks don't change the tree (folders, counts, sizes), so the cached tree is kept: rebuilding
+        it for 150,000 files on every click made quick clicking slow and racy."""
         if path.endswith(OWN):
             folder = path[:-len(OWN)]
             with self.lock:
@@ -390,7 +392,6 @@ class Catalog:
                 else:
                     self.db.execute("INSERT OR REPLACE INTO selection VALUES (?,?)", (path, int(include)))
                 self.db.commit()
-            self.invalidate()
             self._fold(folder, include)
             return
         with self.lock:
@@ -403,7 +404,6 @@ class Catalog:
             else:
                 self.db.execute("INSERT OR REPLACE INTO selection VALUES (?,?)", (path, int(include)))
             self.db.commit()
-        self.invalidate()
         if "/" in path:                    # not for top-level folders: there is no "everything" box
             self._fold(parent_of(path), include)
 
@@ -429,7 +429,10 @@ class Catalog:
         with self.lock:
             self.db.execute("DELETE FROM selection")
             self.db.commit()
-        self.invalidate()
+
+    def has_dir(self, path: str) -> bool:
+        with self.lock:
+            return self.db.execute("SELECT 1 FROM dirs WHERE path=?", (path,)).fetchone() is not None
 
     def state_of(self, path: str, rules: dict) -> str:
         """'on' | 'off' | 'partial' for the tri-state checkbox."""

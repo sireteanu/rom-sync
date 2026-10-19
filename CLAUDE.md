@@ -65,11 +65,13 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   `confirm: true`, refuses while busy, and re-checks so only current leftovers are removed; then
   empty folders go, `Manifest.forget()` and `Catalog.forget_local()`. Never delete anything else
   from the download folder.
-- **Saved as** (tree column + the arrow "where its subfolders go"; settings `folder_places` /
-  `folder_kids`; `/api/folder-place`, `/api/folder-kids`; `folder_map.py`) is the *only* place to
-  decide where folders go - the owner wants everything in the main interface, no separate rules
-  dialog and no text file. Keep it fast: the owner renames almost every folder (Enter / blur saves,
-  "−date" button). Saving, and every start, runs `Catalog.remap(engine.rel_of)`.
+- **Saved as** (tree column, full paths; setting `folder_places`; `/api/folder-place`; `folder_map.py`)
+  is the *only* place to decide where folders go - the owner wants everything in the main interface,
+  no rules dialog, no subfolders button (removed in 1.4.6), no text file. Keep it fast: the owner
+  renames almost every folder, mostly to RomM platform folders (Enter / blur saves, "−date",
+  RomM suggestions). Saving, and every start, runs `Catalog.remap(engine.rel_of)`.
+- **Ticks** must stay quick for many clicks in a row: never invalidate the tree on a tick, and keep
+  app.js `select()` serialised with the `selEpoch` guard in `refreshVisible()`.
 - **Renamed folders**: lolroms renames dated folders when a newer set arrives. `Catalog.follow_renames()`
   (after every finished scan) moves ticks from a vanished folder to its same-stem sibling
   (`catalog.SET_DATE`/`set_stem`); `Engine._scan` re-reads only the parent of a ticked dated folder

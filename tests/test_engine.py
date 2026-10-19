@@ -378,9 +378,9 @@ def test_a_sync_with_nothing_to_do_writes_nothing_to_the_disk(site, app_factory,
 
 
 
-def test_saved_as_moves_a_folder_and_its_subfolders(site_factory, app_factory):
-    """Saved as: a folder's own place (here a /path from the download folder), and where its
-    subfolders go (here the download folder itself); Clean up agrees; resetting moves them back."""
+def test_saved_as_moves_a_folder_elsewhere(site_factory, app_factory):
+    """Saved as with a full path: the folder (and everything in it) goes there; Clean up agrees;
+    clearing it puts the files back where the site has them, old copies are leftovers."""
     from conftest import kids, on_disk, scan, select, sync
     site = site_factory("dated")
     c = app_factory(site)
@@ -389,13 +389,10 @@ def test_saved_as_moves_a_folder_and_its_subfolders(site_factory, app_factory):
     select(c, f"Acorn/{OLD_SET}")
     r = c.post("/api/folder-place", json={"path": f"Acorn/{OLD_SET}", "place": "/Computers/Archimedes"})
     assert r.status_code == 200, r.text
-    assert c.post("/api/folder-kids", json={"path": "Atari", "place": "/"}).status_code == 200
+    assert c.post("/api/folder-place", json={"path": "Atari/2600", "place": "/2600"}).status_code == 200
     node = kids(c, "Acorn")[OLD_SET]
-    assert (node["place"], node["custom"], node["disk_path"], node["moved"]) == \
-        ("/Computers/Archimedes", True, "Computers/Archimedes", True)
-    a = kids(c)["Atari"]
-    assert (a["kids_to"], a["custom"], a["moved"]) == ("/", False, False)
-    assert kids(c, "Atari")["2600"]["disk_path"] == "2600"
+    assert (node["custom"], node["disk_path"], node["moved"]) == (True, "Computers/Archimedes", True)
+    assert "kids_to" not in node
     sync(c)
     assert on_disk(c.data) == {"Computers/Archimedes/Zarch.7z", "2600/Adventure (USA).7z",
                                "2600/Pitfall! (USA).7z", "2600/Combat_ Tank _Plus_.7z"}
@@ -403,12 +400,49 @@ def test_saved_as_moves_a_folder_and_its_subfolders(site_factory, app_factory):
     n = len(site.file_requests())
     sync(c)
     assert len(site.file_requests()) == n
-    # back to the site's places: the next sync puts them there, old copies are leftovers
-    assert c.post("/api/folder-kids", json={"path": "Atari", "place": ""}).status_code == 200
+    assert c.post("/api/folder-place", json={"path": "Atari/2600", "place": ""}).status_code == 200
     assert kids(c, "Atari")["2600"]["disk_path"] == "Atari/2600"
     sync(c)
     left = {f["path"]: f["reason"] for f in c.get("/api/cleanup").json()["files"]}
     assert set(left) == {"2600/Adventure (USA).7z", "2600/Pitfall! (USA).7z", "2600/Combat_ Tank _Plus_.7z"}
+
+
+def test_old_subfolders_setting_becomes_saved_as(site, app_factory, tmp_path):
+    """1.4.3-1.4.5 "where its subfolders go" is gone: each affected subfolder gets its current place
+    as its own Saved as, so nothing moves on disk."""
+    import json
+    import sqlite3
+    from conftest import kids, scan
+    c = app_factory(site)
+    scan(c)
+    c.__exit__(None, None, None)
+    db = sqlite3.connect(tmp_path / "config" / "catalog.db")
+    db.execute("INSERT OR REPLACE INTO settings VALUES ('folder_kids', ?)", (json.dumps({"Atari": "/"}),))
+    db.execute("INSERT OR REPLACE INTO settings VALUES ('folder_places', ?)", (json.dumps({"Atari/Lynx": "/Handhelds/Lynx"}),))
+    db.commit()
+    db.close()
+    c = app_factory(site)
+    k = kids(c, "Atari")
+    assert {n: k[n]["disk_path"] for n in k} == {"2600": "2600", "5200": "5200", "800": "800", "Lynx": "Handhelds/Lynx"}
+    assert kids(c, "Atari/800")["Flux"]["disk_path"] == "800/Flux"
+    s = c.get("/api/settings").json()["settings"]
+    assert s["folder_kids"] == {} and s["folder_places"]["Atari/2600"] == "/2600"
+    assert c.post("/api/folder-kids", json={"path": "Atari", "place": "/"}).status_code in (404, 405)
+
+
+def test_quick_ticks_all_count(site, app_factory):
+    """Several ticks in a row all land (the page sends them one after another), and ticking keeps
+    the cached folder tree (rebuilding it for every click made quick clicking slow)."""
+    from conftest import kids, scan
+    c = app_factory(site)
+    scan(c)
+    kids(c)
+    for path, on in (("Atari/2600", True), ("Atari/5200", True), ("Atari/800", True),
+                     ("Atari/2600", False), ("Atari/2600", True)):
+        assert c.post("/api/select", json={"path": path, "include": on}).status_code == 200
+    k = kids(c, "Atari")
+    assert (k["2600"]["state"], k["5200"]["state"], k["800"]["state"], k["Lynx"]["state"]) == ("on", "on", "on", "off")
+    assert c.post("/api/select", json={"path": "Nope/Missing", "include": True}).status_code == 404
 
 
 def test_saved_as_refuses_bad_places(site, app_factory):
