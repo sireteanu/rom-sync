@@ -68,6 +68,11 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
 - **Folder map** (`folder_map.py`, setting `folder_map`, `/api/folder-map`, ☰ → Folder map and the
   arrow button on tree rows): rules are edited in the page only (no text file). Saving them, and every
   start, runs `Catalog.remap(engine.rel_of)` so catalog paths always match the rules.
+- **Renamed folders**: lolroms renames dated folders when a newer set arrives. `Catalog.follow_renames()`
+  (after every finished scan) moves ticks from a vanished folder to its same-stem sibling
+  (`catalog.SET_DATE`/`set_stem`); `Engine._scan` re-reads only the parent of a ticked dated folder
+  it couldn't read (`recurse=False`), then refreshes the new folder; exact Folder map rules follow.
+  Never rename folders on disk automatically.
 - **Change history** (`changes` table, `Catalog.add_change`): a sync records new/updated/resumed/failed
   per file (job = the sync's start time), Clean up records deleted; pruned after 365 days. Activity
   counters open `/api/sync/files?kind=`, the header's Activity log uses `/api/changes/days` + `?day=`.

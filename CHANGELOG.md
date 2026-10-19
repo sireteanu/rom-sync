@@ -5,6 +5,22 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-19
+
+The Folder map release: your own folder names on disk, and no more re-ticking or re-mapping when
+lolroms moves a folder to a newer set date.
+
+### New
+- **Folders renamed to a newer set date are followed.** When lolroms renames
+  "Archimedes (20231029-220453)" to "Archimedes (20261001-120000)", your ticks move to the new
+  folder, and Folder map rules naming the old folder follow it too. A sync notices this by itself:
+  if a ticked folder can't be read, it re-reads the folder above it to find the renamed one, so you
+  don't have to wait for the next full scan. Files already downloaded aren't fetched again when the
+  folder is mapped to a fixed name.
+- **The arrow on a dated folder suggests a rule with `(*)`** (`Acorn/Archimedes (*)` →
+  `Acorn/Archimedes`), which keeps matching whatever date the site uses next.
+- Builds on the **Folder map** from 1.3.10 (☰ → Folder map, or the arrow on a folder's row).
+
 ## [1.3.10] - 2026-10-19
 
 ### New

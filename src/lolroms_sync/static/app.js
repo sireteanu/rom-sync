@@ -650,15 +650,27 @@ function fmapRow(site = "", local = "") {
   $("#fmap-rows").append(r);
   return r;
 }
+const SET_DATE = /\s*\(\d{8}-\d{6}\)$/;     // "Archimedes (20231029-220453)": the set's date
+// does a Folder map rule's site folder (with *) name exactly this folder?
+function ruleNames(site, path) {
+  const a = site.split("/").filter(Boolean), b = path.split("/");
+  if (a.length !== b.length) return false;
+  return a.every((seg, i) => new RegExp("^" + seg.split("*").map((t) => t.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$", "i").test(b[i]));
+}
 async function openFolderMap(path) {
   const { rules } = await api("/api/folder-map");
   $("#fmap-rows").innerHTML = "";
   let focus = null;
   for (const r of rules) {
     const el = fmapRow(r.site, r.local);
-    if (path && r.site.toLowerCase() === path.toLowerCase()) focus = el;
+    if (path && !focus && ruleNames(r.site, path)) focus = el;
   }
-  if (path && !focus) focus = fmapRow(path, path);      // a new rule for the folder clicked in the tree
+  if (path && !focus) {
+    // a new rule for the folder clicked in the tree; a dated folder gets "(*)" so the rule keeps
+    // working when the site moves it to a newer set
+    const dated = SET_DATE.test(path);
+    focus = fmapRow(dated ? path.replace(SET_DATE, " (*)") : path, path.replace(SET_DATE, ""));
+  }
   $("#fmap-error").hidden = true;
   $("#fmap-dlg").showModal();
   if (focus) { const i = $(".f-local", focus); i.focus(); i.select(); }

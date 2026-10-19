@@ -432,3 +432,68 @@ def test_paths_from_1_3_7_are_put_back_at_start(site_factory, app_factory, tmp_p
     db = sqlite3.connect(tmp_path / "config" / "catalog.db")
     assert db.execute("SELECT rel FROM files WHERE name='Zarch.7z'").fetchone()[0] == \
         "Acorn/Archimedes (20231029-220453)/Zarch.7z"
+
+
+OLD_SET = "Archimedes (20231029-220453)"
+NEW_SET = "Archimedes (20261001-120000)"
+
+
+def rename_on_site(site, old=OLD_SET, new=NEW_SET):
+    """lolroms moves a folder to a newer set date: same files, new folder name."""
+    site.tree["Acorn"] = [new if n == old else n for n in site.tree["Acorn"]]
+    site.tree[f"Acorn/{new}"] = site.tree.pop(f"Acorn/{old}")
+    site.files[f"Acorn/{new}"] = site.files.pop(f"Acorn/{old}")
+
+
+def test_ticks_follow_a_folder_renamed_to_a_newer_set_date_in_a_scan(site_factory, app_factory):
+    from conftest import kids, on_disk, scan, select, sync
+    site = site_factory("dated")
+    c = app_factory(site)
+    scan(c)
+    select(c, f"Acorn/{OLD_SET}")
+    c.post("/api/folder-map", json={"rules": [{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}]})
+    sync(c)
+    rename_on_site(site)
+    st = scan(c)
+    assert any("renamed" in l["msg"] for l in c.get("/api/status", params={"log_since": 0}).json()["log"])
+    k = kids(c, "Acorn")
+    assert OLD_SET not in k and k[NEW_SET]["state"] == "on" and k[NEW_SET]["saved_to"] == "Acorn/Archimedes"
+    n = len(site.file_requests())
+    sync(c)                                    # same files, same folder on disk: nothing to fetch
+    assert len(site.file_requests()) == n
+    assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z"}
+    assert c.get("/api/cleanup").json()["files"] == []
+    assert st["busy"] is False
+
+
+def test_a_sync_finds_a_renamed_ticked_folder_by_itself(site_factory, app_factory):
+    """No scan in between: the sync can't read the old folder, re-reads its parent, finds the
+    renamed folder and carries on; an exact Folder map rule follows the folder too."""
+    from conftest import kids, on_disk, scan, select, sync
+    site = site_factory("dated")
+    c = app_factory(site)
+    scan(c)
+    select(c, f"Acorn/{OLD_SET}")
+    c.post("/api/folder-map", json={"rules": [{"site": f"Acorn/{OLD_SET}", "local": "Acorn/Archimedes"}]})
+    sync(c)
+    rename_on_site(site)
+    site.files[f"Acorn/{NEW_SET}"].append("Lander.7z")         # the new set has one more game
+    n = len(site.file_requests())
+    sync(c)
+    assert len(site.file_requests()) == n + 1                  # only the new game
+    assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z", "Acorn/Archimedes/Lander.7z"}
+    assert kids(c, "Acorn")[NEW_SET]["state"] == "on"
+    assert c.get("/api/folder-map").json()["rules"] == [{"site": f"Acorn/{NEW_SET}", "local": "Acorn/Archimedes"}]
+
+
+def test_follow_renames_only_moves_ticks_to_a_folder_with_the_same_name(tmp_path):
+    from lolroms_sync.catalog import Catalog
+    cat = Catalog(str(tmp_path / "catalog.db"))
+    cat.add_dirs({"Acorn", "Acorn/Archimedes (20261001-120000)", "Acorn/Atom (20261001-120000)"}, 1)
+    cat.db.executemany("INSERT INTO selection VALUES (?,?)", [
+        ("Acorn/Archimedes (20231029-220453)", 1), ("Acorn/Archimedes (20231029-220453)/.", 1),
+        ("Acorn/Risc PC (20231029-220453)", 1), ("Acorn/Gone", 1)])
+    renames = cat.follow_renames()
+    assert renames == {"Acorn/Archimedes (20231029-220453)": "Acorn/Archimedes (20261001-120000)"}
+    assert cat.rules() == {"Acorn/Archimedes (20261001-120000)": True, "Acorn/Archimedes (20261001-120000)/.": True,
+                           "Acorn/Risc PC (20231029-220453)": True, "Acorn/Gone": True}

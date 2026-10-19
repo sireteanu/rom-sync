@@ -22,7 +22,7 @@ from .core.sync import MANIFEST_NAME, FileInfo, Manifest, size_range, stamp_fold
 from .core.util import fmt_bytes, parse_size
 
 from . import __version__
-from .catalog import Catalog
+from .catalog import Catalog, SET_DATE, parent_of, renamed_path
 from .core.urls import UrlRules
 from .folder_map import FolderMap
 from .scanner import Scanner
@@ -315,15 +315,58 @@ class Engine:
             self._schedule_next()
 
     async def _scan(self, client, robots, root: str = "", roots=None) -> dict:
-        out = {}
-        for r in (roots if roots is not None else [root]):
-            if self.stop_requested:
-                break
+        out: dict = {}
+        renamed: dict = {}
+
+        async def run(r: str, recurse: bool = True) -> dict:
             self.scanner = Scanner(self.catalog, self.base, client, workers=self.scan_workers,
                                    delay=self.scan_delay, user_agent=USER_AGENT, robots=robots,
                                    folder_map=self.fmap)
-            out[r or "/"] = await self.scanner.run(r)
+            res = await self.scanner.run(r, recurse)
+            renamed.update(res.get("renamed") or {})
+            return res
+
+        for r in (roots if roots is not None else [root]):
+            if self.stop_requested:
+                break
+            r = renamed_path(r, renamed)            # an earlier folder in this loop found it renamed
+            out[r or "/"] = await run(r)
+            if r and r not in self.scanner.read and not self.stop_requested:
+                # couldn't read a ticked folder: the site may have renamed it to a newer set date,
+                # so read its parent's listing (just that page) to find it and move the ticks
+                last = r.rsplit("/", 1)[-1]
+                if SET_DATE.search(last):
+                    log.info("%s couldn't be read - checking whether the site renamed it", r)
+                    await run(parent_of(r), recurse=False)
+                    new = renamed_path(r, renamed)
+                    if new != r and not self.stop_requested:
+                        out[new] = await run(new)
+        if renamed:
+            self._follow_map_renames(renamed)
         return out
+
+    def _follow_map_renames(self, renamed: dict) -> None:
+        """Folder map rules naming a renamed folder exactly (no *) follow it too."""
+        rules, changed = [], False
+        for rule in self.fmap.rules:
+            site = rule["site"]
+            if "*" not in site:
+                low = {k.casefold(): v for k, v in renamed.items()}
+                for old in sorted(low, key=len, reverse=True):
+                    if site.casefold() == old or site.casefold().startswith(old + "/"):
+                        site, changed = low[old] + site[len(old):], True
+                        break
+            rules.append({"site": site, "local": rule["local"]})
+        if changed:
+            try:
+                clean = FolderMap.clean(rules)
+            except ValueError as e:
+                log.warning("Folder map not updated after a rename: %s", e)
+                return
+            self.catalog.save_settings({"folder_map": clean})
+            self.fmap = FolderMap(clean)
+            log.info("Folder map: rules for renamed folders now name the new folders")
+            self._remap()
 
     async def _sync(self, client, robots) -> dict:
         s = self.catalog.settings()

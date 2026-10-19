@@ -92,7 +92,12 @@ and say where it goes, for example:
 | `Acorn/Archimedes (*)` | `Acorn/Archimedes` |
 | `Acorn/Risc PC (*)` | `Acorn/Risc PC` |
 
-`*` stands for any text, so the rule still works after the site changes the date. Subfolders follow
+`*` stands for any text, so the rule still works after the site changes the date. The arrow fills
+this in for you on a dated folder.
+
+You don't need to re-tick anything when the site moves a folder to a newer date: your ticks follow
+the renamed folder, after a scan or by themselves during the next sync. With a Folder map rule the
+files keep their place on disk, so only new or changed files are downloaded. Subfolders follow
 their folder, file names stay as on the site, and the first rule that matches wins. The tree shows
 "→ Acorn/Archimedes" next to a mapped folder. Files you already downloaded aren't moved: move them
 into the new folder yourself before the next sync (Rom Sync recognises them by size), or let the sync

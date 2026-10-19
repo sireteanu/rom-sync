@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -41,6 +42,24 @@ OWN = "/."          # selection key suffix: "Nintendo/Super Famicom/." = only th
 
 def parent_of(path: str) -> str:
     return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
+# lolroms names many folders after their set's date and renames them when a newer set arrives:
+# "Acorn/Archimedes (20231029-220453)" -> "Acorn/Archimedes (20261001-120000)"
+SET_DATE = re.compile(r"\s*\((\d{8}-\d{6})\)$")
+
+
+def set_stem(name: str) -> str:
+    """A folder name without its set date, for recognising a renamed folder."""
+    return SET_DATE.sub("", name).strip().casefold()
+
+
+def renamed_path(path: str, renames: dict) -> str:
+    """Apply {old folder: new folder} (from Catalog.follow_renames) to a path below one of them."""
+    for old in sorted(renames, key=len, reverse=True):
+        if path == old or path.startswith(old + "/"):
+            return renames[old] + path[len(old):]
+    return path
 
 
 def ancestors(path: str):
@@ -237,6 +256,52 @@ class Catalog:
             self.db.commit()
         self.invalidate()
         return len(gone_files), len(gone_dirs)
+
+    def follow_renames(self) -> dict:
+        """After a scan: a ticked folder the site no longer lists, whose parent now lists a folder
+        with the same name and another set date, was renamed by the site - move its ticks there.
+        -> {old folder: new folder} for every renamed folder found."""
+        with self.lock:
+            dirs = {p for (p,) in self.db.execute("SELECT path FROM dirs")}
+            kids: dict = {}
+            for p, par, name in self.db.execute("SELECT path, parent, name FROM dirs WHERE path<>''"):
+                kids.setdefault(par or "", []).append((name or p.rsplit("/", 1)[-1], p))
+            renames: dict = {}
+
+            def resolve(path: str) -> Optional[str]:
+                parts, cur = path.split("/"), ""
+                for i, seg in enumerate(parts):
+                    cand = f"{cur}/{seg}" if cur else seg
+                    if cand in dirs:
+                        cur = cand
+                        continue
+                    stem = set_stem(seg)
+                    hits = [(n, p) for n, p in kids.get(cur, ())
+                            if set_stem(n) == stem and (SET_DATE.search(n) or SET_DATE.search(seg))]
+                    if not hits:
+                        return None
+                    # newest set first, if the site lists more than one
+                    name, new = max(hits, key=lambda h: (SET_DATE.search(h[0]) or [None, ""])[1])
+                    renames["/".join(parts[:i + 1])] = new
+                    cur = new
+                return cur
+
+            moved = []
+            for key, include in self.db.execute("SELECT path, include FROM selection").fetchall():
+                folder = key[:-len(OWN)] if key.endswith(OWN) else key
+                if not folder or folder in dirs:
+                    continue
+                new = resolve(folder)
+                if new and new != folder:
+                    moved.append((key, new + key[len(folder):], include))
+            for old, new, include in moved:
+                self.db.execute("DELETE FROM selection WHERE path=?", (old,))
+                self.db.execute("INSERT OR IGNORE INTO selection VALUES (?,?)", (new, include))
+            if moved:
+                self.db.commit()
+        if moved:
+            self.invalidate()
+        return renames
 
     def commit(self):
         with self.lock:

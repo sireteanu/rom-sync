@@ -131,9 +131,11 @@ class Scanner:
                 await asyncio.sleep(wait)
         raise FetchError(err)
 
-    async def run(self, root: str = "") -> dict:
-        """Scan the whole site (root="") or one folder and everything below it."""
+    async def run(self, root: str = "", recurse: bool = True) -> dict:
+        """Scan the whole site (root="") or one folder and everything below it.
+        recurse=False reads only that folder's own listing (its files and subfolder names)."""
         self.root, self.pages, self.files, self.errors = root, 0, 0, 0
+        self.read: set = set()                # folders whose listing was read in this run
         self.started = time.monotonic()
         start = url_for(self.base, root)
         cfg = Config(start_url=start, keep_params=frozenset({"dir"}), workers=self.workers,
@@ -142,7 +144,7 @@ class Scanner:
         extractor = LinkExtractor(cfg, rules)
         self.lim = Limiter(self.workers, self.delay, True, 4.0)
         self.queue = asyncio.Queue()
-        kind = "full" if not root else "folder"
+        kind = "full" if not root and recurse else "folder"
         scan_id = self.catalog.start_scan(kind, root)
         log.info("Reading the site's listings%s", f" under {root}" if root else "")
         seen = {rules.start}
@@ -178,6 +180,9 @@ class Scanner:
             seen.update(new)
             self.catalog.add_dirs({dir_of(l) for l in links if dir_of(l)}, scan_id)
             self.catalog.page_scanned(path, page, scan_id, rows)
+            self.read.add(path)
+            if not recurse:
+                new = []
             self.pages += 1
             self.files += len(rows)
             for l in new:
@@ -208,12 +213,16 @@ class Scanner:
             await asyncio.gather(*tasks, return_exceptions=True)
             self.catalog.commit()
         status = "stopped" if self.stopping else "done"
-        removed = (0, 0)
+        removed, renamed = (0, 0), {}
         if status == "done":
             removed = self.catalog.prune(scan_id, root)
+            renamed = self.catalog.follow_renames()
+            for old, new in renamed.items():
+                log.info("The site renamed %s to %s - your ticks moved along", old, new.rsplit("/", 1)[-1])
         self.catalog.finish_scan(scan_id, self.pages, self.files, status)
         summary = {"root": root, "pages": self.pages, "files": self.files, "errors": self.errors,
-                   "removed_files": removed[0], "removed_dirs": removed[1], "status": status}
+                   "removed_files": removed[0], "removed_dirs": removed[1], "status": status,
+                   "renamed": renamed}
         log.info("Listing scan %s: %d pages, %d files%s%s", status, self.pages, self.files,
                  f", {self.errors} pages failed" if self.errors else "",
                  f", {removed[0]} files / {removed[1]} folders no longer on the site" if any(removed) else "")

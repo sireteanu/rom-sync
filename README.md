@@ -41,6 +41,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 | Catalog | **Scan site** reads every listing page of lolroms.com (about 330 folders, 117,000+ files) into a local database. File links are never requested while scanning. Sections linked only from the site's header bar (Arcade, Pokéhacks, Audio [FLAC], fixdats) are included. |
 | Folder tree | Every folder with file count, total size, newest file date and how much is synced. Columns sort by clicking their header (ascending → descending → name order). Search box finds folders by name. |
 | Folder map | Save a site folder (and everything in it) under another folder name, set in the page (☰ → Folder map, or the arrow on a folder's row). `*` matches any text, so a rule survives the site renaming a folder to a newer set date. |
+| Renamed folders | When the site moves a folder to a newer set date (`Archimedes (2023…)` → `Archimedes (2026…)`), ticks and exact Folder map rules follow it, after a scan or by themselves during a sync. |
 | Selection | Tri-state tick boxes. Ticking a folder includes everything below it, including folders the site adds later. A folder with files of its own *and* subfolders shows a **Files in this folder** row, so its own files can be ticked without its subfolders. Ticks are saved immediately. |
 | Sync | Downloads only what's missing, half-finished (`.part`, resumed) or changed on the site (date or size in the listing differs). Unchanged files cost no network request. |
 | Dates | Each saved file gets the date the website lists for it (12:00 local time). After a sync, each folder gets the date of its newest file. |
@@ -168,6 +169,12 @@ downloaded before:
   (and every start) recomputes all catalog paths (`Catalog.remap()`); files whose place changed are
   planned afresh by the next sync (a copy already at the new place is adopted by size). Clean up maps
   catalog folders to disk with the same map; several site folders may share one disk folder.
+- **Renamed folders** (`Catalog.follow_renames()`, run after every finished scan): a ticked folder the
+  site no longer lists, whose parent now lists a folder with the same name apart from the set date
+  (` (YYYYMMDD-HHMMSS)` at the end; the newest if there are several), gets its selection rules moved
+  there; Folder map rules naming it exactly (no `*`) follow (`Engine._follow_map_renames`). During
+  the pre-sync refresh, a ticked dated folder that can't be read makes the engine read its parent's
+  listing only (`Scanner.run(parent, recurse=False)`), follow the rename, and refresh the new folder.
 - Files are written as `<name>.part` and renamed when complete. A web page received instead of a
   file is rejected, and archive headers are checked (7z/zip/rar…).
 - **Dates**: lolroms sends no `Last-Modified` header, so the listing date is the only date; files
