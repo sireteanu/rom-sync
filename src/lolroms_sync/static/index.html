@@ -35,10 +35,6 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.6 4.9-.1-2.8 2-1.6-2-3.4-2.4.9-2.4-1.4L15.3 2h-3.9l-.4 2.6-2.4 1.4-2.4-.9-2 3.4 2 1.6v2.8l-2 1.6 2 3.4 2.4-.9 2.4 1.4.4 2.6h3.9l.4-2.6 2.4-1.4 2.4.9 2-3.4-2-1.6Z"/></svg>
           <span><b>Settings</b><small>Download folder, file types, speed, schedule</small></span>
         </button>
-        <button id="btn-fmap" role="menuitem">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3zM13 13h5m-2-2 2 2-2 2"/></svg>
-          <span><b>Folder map</b><small>Rules with * for many folders, or saving folders elsewhere</small></span>
-        </button>
         <button id="btn-theme" role="menuitem" class="theme-toggle">
           <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
           <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>
@@ -80,7 +76,7 @@
       <button id="btn-clear-sel" class="btn small ghost" title="Untick everything">Clear selection</button>
     </div>
     <div class="cols">
-      <button class="sort c-name" data-sort="name" title="Sort by name">Folder</button><span class="c-as" title="The folder's name in your download folder. Type a new name and press Enter.">Saved as</span><button class="sort c-num c-files" data-sort="files" title="Sort by number of files">Files</button><button class="sort c-num c-size" data-sort="bytes" title="Sort by size">Size</button>
+      <button class="sort c-name" data-sort="name" title="Sort by name">Folder</button><span class="c-as" title="Where the folder goes in your download folder. Type and press Enter:&#10;Archimedes = a new name, in the same place&#10;Extras/Archimedes = inside a folder in the same place&#10;/Sega/Archimedes = counted from the download folder&#10;Empty = as on the site. The arrow button sets where its subfolders go.">Saved as</span><button class="sort c-num c-files" data-sort="files" title="Sort by number of files">Files</button><button class="sort c-num c-size" data-sort="bytes" title="Sort by size">Size</button>
       <button class="sort c-date" data-sort="newest" title="Sort by the newest file's date">Updated</button><button class="sort c-meter" data-sort="synced" title="Sort by how much is synced">Synced</button>
     </div>
     <div id="tree" class="tree" role="tree"></div>
@@ -169,21 +165,18 @@
   </form>
 </dialog>
 
-<dialog id="fmap-dlg" class="dlg wide">
-  <form id="fmap-form" method="dialog">
-    <div class="dlg-head"><h2>Folder map</h2><button class="btn icon" value="cancel" aria-label="Close">✕</button></div>
-    <p class="hint">To rename one folder, type its new name in the tree's <b>Saved as</b> column.
-      Rules here are for more: save a site folder, and everything in it, anywhere in the
-      download folder. Use <b>*</b> in the site folder for any text, so a rule keeps working when the site
-      renames a folder: <code>Acorn/Archimedes (*)</code> → <code>Acorn/Archimedes</code>.
-      Several site folders can share one folder. The first rule that matches wins.</p>
-    <div class="fmap-head"><span>Folder on the site</span><span></span><span>Save in this folder</span><span></span></div>
-    <div id="fmap-rows"></div>
-    <button type="button" class="btn ghost" id="fmap-add">+ Add rule</button>
-    <p class="hint">Files already downloaded stay where they are; the next sync puts them in the new
-      folder (move them yourself first to avoid downloading them again). Old copies show up in Clean up.</p>
-    <p id="fmap-error" class="error" hidden></p>
-    <div class="dlg-foot"><button class="btn ghost" value="cancel">Cancel</button><button class="btn primary" id="fmap-save" value="save">Save folder map</button></div>
+<dialog id="kids-dlg" class="dlg">
+  <form id="kids-form" method="dialog">
+    <div class="dlg-head"><h2>Where its subfolders go</h2><button class="btn icon" value="cancel" aria-label="Close">✕</button></div>
+    <p class="hint">Each subfolder of <b id="kids-folder"></b> keeps its own name, including subfolders the site
+      adds later. Its own files stay where the folder is.</p>
+    <label class="field"><span>Put its subfolders in</span>
+      <input name="place" id="kids-place" spellcheck="false" autocomplete="off" placeholder="Inside the folder, as usual">
+      <small><code>/</code> = straight in the download folder &nbsp;·&nbsp; <code>/Sega/32X Extras</code> = that folder
+        (counted from the download folder) &nbsp;·&nbsp; <code>Extras</code> = a folder inside this one &nbsp;·&nbsp;
+        empty = inside the folder, as on the site</small></label>
+    <p id="kids-error" class="error" hidden></p>
+    <div class="dlg-foot"><button class="btn ghost" value="cancel">Cancel</button><button class="btn primary" id="kids-save" value="save">Save</button></div>
   </form>
 </dialog>
 
@@ -229,7 +222,7 @@
       <button class="twisty" aria-label="Expand"></button>
       <input type="checkbox" class="tick">
       <span class="name"></span>
-      <span class="c-as"><input class="as" spellcheck="false" autocomplete="off"><button class="nodate" type="button" title="Save it without the date" aria-label="Remove the date from the name" hidden>&minus;date</button></span>
+      <span class="c-as"><input class="as" spellcheck="false" autocomplete="off"><button class="nodate" type="button" title="Save it without the date" aria-label="Remove the date from the name" hidden>&minus;date</button><button class="kids" type="button" aria-label="Where its subfolders go" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v12h12m0 0-3-3m3 3-3 3"/></svg></button></span>
       <span class="c-num files"></span>
       <span class="c-num size"></span>
       <span class="c-date date"></span>

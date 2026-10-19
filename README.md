@@ -40,9 +40,8 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 |---|---|
 | Catalog | **Scan site** reads every listing page of lolroms.com (about 330 folders, 117,000+ files) into a local database. File links are never requested while scanning. Sections linked only from the site's header bar (Arcade, Pokéhacks, Audio [FLAC], fixdats) are included. |
 | Folder tree | Every folder with file count, total size, newest file date and how much is synced. Columns sort by clicking their header (ascending → descending → name order). Search box finds folders by name. |
-| Saved as | A column in the folder tree with each folder's name on disk: type a new name (or click **−date** on a dated folder) to save that folder and everything in it under that name. |
-| Folder map | Rules for more than renaming (☰ → Folder map): save a site folder anywhere in the download folder; `*` matches any text, so one rule covers many folders and survives the site renaming a folder to a newer set date. |
-| Renamed folders | When the site moves a folder to a newer set date (`Archimedes (2023…)` → `Archimedes (2026…)`), ticks and exact Folder map rules follow it, after a scan or by themselves during a sync. |
+| Saved as | A column in the folder tree: where each folder goes on disk. Type a name (or click **−date** on a dated folder), a path in the same place (`Extras/X`), or a path from the download folder (`/Sega/X`). The arrow next to it sets where a folder's subfolders go (`/` = the base of the download folder). Everything below a folder follows it. |
+| Renamed folders | When the site moves a folder to a newer set date (`Archimedes (2023…)` → `Archimedes (2026…)`), ticks and Saved as settings follow it, after a scan or by themselves during a sync. |
 | Selection | Tri-state tick boxes. Ticking a folder includes everything below it, including folders the site adds later. A folder with files of its own *and* subfolders shows a **Files in this folder** row, so its own files can be ticked without its subfolders. Ticks are saved immediately. |
 | Sync | Downloads only what's missing, half-finished (`.part`, resumed) or changed on the site (date or size in the listing differs). Unchanged files cost no network request. |
 | Dates | Each saved file gets the date the website lists for it (12:00 local time). After a sync, each folder gets the date of its newest file. |
@@ -162,22 +161,22 @@ downloaded before:
   allows it because no download runs yet) and asks the disk once per file (`os.stat`, passed to
   `sync.plan()`, `stamp_file()` and `_set_mode()`); permissions and dates are only written when they
   differ. The Clean up check (`walk` + `find`) also runs in a worker thread.
-- **Saved as** (`folder_map.py`, setting `folder_names` `{site folder: name}`, `POST /api/folder-name`):
-  the folder keeps its place but gets another name on disk; subfolders follow. A name wins over Folder
-  map rules for that exact folder (a rule places it, the name names it). Names follow folders the site
-  renames to a newer set date, like ticks do.
-- **Folder map** (`folder_map.py`): rules `{site, local}` stored in the `folder_map` setting, edited
-  only through `POST /api/folder-map`. `site` is a site folder path where `*` matches any text inside
-  one folder name (case-insensitive); `local` is the folder inside the download folder. The first
-  matching rule wins and subfolders follow (`<site>/Sub/x.7z` -> `<local>/Sub/x.7z`); file names are
-  never changed. `UrlRules.rel_path(url, folder_map)` applies it when a listing is read; saving rules
-  (and every start) recomputes all catalog paths (`Catalog.remap()`); files whose place changed are
-  planned afresh by the next sync (a copy already at the new place is adopted by size). Clean up maps
-  catalog folders to disk with the same map; several site folders may share one disk folder.
+- **Saved as** (`folder_map.py`): two settings keyed by site folder (case-insensitive), changed only
+  through their endpoints. `folder_places` `{folder: place}`: a name (renamed in place), a path (below
+  its parent's place on disk) or `/path` (from the download folder). `folder_kids` `{folder: place}`:
+  where that folder's subfolders go, each under its own name (`/` = the download folder itself);
+  the folder's own files stay with it, and a subfolder's own place wins. Places are resolved top-down
+  (`FolderMap.map_parts`), so everything below a folder follows it; file names never change.
+  `UrlRules.rel_path(url, folder_map)` applies it when a listing is read; saving a setting (and every
+  start) recomputes all catalog paths (`Catalog.remap()`); files whose place changed are planned afresh
+  by the next sync (a copy already at the new place is adopted by size). Clean up maps catalog folders
+  to disk with the same map; several site folders may share one disk folder. Folder map rules and
+  names from 1.3.10-1.4.2 (`folder_map`, `folder_names`) are converted once at start
+  (`from_old_settings`).
 - **Renamed folders** (`Catalog.follow_renames()`, run after every finished scan): a ticked folder the
   site no longer lists, whose parent now lists a folder with the same name apart from the set date
   (either form, see the lolroms facts below; the newest if there are several), gets its selection rules moved
-  there; Folder map rules naming it exactly (no `*`) follow (`Engine._follow_map_renames`). During
+  there; its Saved as settings follow (`Engine._follow_map_renames`). During
   the pre-sync refresh, a ticked dated folder that can't be read makes the engine read its parent's
   listing only (`Scanner.run(parent, recurse=False)`), follow the rename, and refresh the new folder.
 - Files are written as `<name>.part` and renamed when complete. A web page received instead of a
@@ -284,8 +283,9 @@ Stored in the catalog (`settings` table); changed in the Settings dialog or `POS
 | `check_remote` | `false` | Ask the server about every existing file (exact, one request per file) |
 | `outage_wait_hours` | `12` | How long a sync waits for the site when it's down before pausing (0 = don't wait; files then fail after their retries) |
 | `interrupted_job` | `""` | Internal: set while a sync runs |
-| `folder_map` | `[]` | Folder map rules `[{site, local}]`; changed only with `POST /api/folder-map` |
-| `folder_names` | `{}` | "Saved as" names `{site folder: name on disk}`; changed only with `POST /api/folder-name` |
+| `folder_places` | `{}` | Saved as: `{site folder: place}`; changed only with `POST /api/folder-place` |
+| `folder_kids` | `{}` | Where a folder's subfolders go: `{site folder: place}`; changed only with `POST /api/folder-kids` |
+| `folder_map`, `folder_names` | | From 1.3.10-1.4.2; converted to `folder_places` at start, then emptied |
 
 ---
 
@@ -317,7 +317,7 @@ answers like Rom Sync, a new start just opens the running copy; otherwise it exp
 | `<config>/catalog.db` | SQLite (WAL): `dirs`, `files` (listing date/size, local state), `selection` (rules), `settings`, `scans`, `history`, `changes` (per-file change history: time, local day, sync id = its start time, kind new/updated/resumed/failed/deleted, path, size, note; pruned after 365 days) |
 | `<config>/rom-sync.log` | Log (rotating, 2 MB × 3). Each start logs the catalog path, size and contents (folders, files, ticks, last full scan) and the download folder's top-level items; a warning when the catalog is new or empty but the download folder isn't (wrong `/config` mapping) |
 | `<config>/romm-mapper.json` | RomM Mapper choices from before 1.3.5, kept for copying to ROM Mapper |
-| `<data>/<site path>` | Synced files, same folder structure as the site (`Nintendo/Super Famicom/…`), except where a Folder map rule names a folder differently |
+| `<data>/<site path>` | Synced files, same folder structure as the site (`Nintendo/Super Famicom/…`), except where Saved as puts a folder elsewhere |
 | `<data>/.dir_crawler.db` | Manifest: what the listing said for each saved file, Last-Modified/ETag, per-site parallel limit |
 | `<data>/…/*.part` | Unfinished downloads (resumed later) |
 
@@ -333,16 +333,15 @@ All JSON; the page uses nothing else.
 | Method & path | Purpose |
 |---|---|
 | `GET /api/status?log_since=N` | Version, busy, job, catalog totals, selection totals (cached until the tree or ticks change), scan / sync progress (incl. `bytes_planned`, `bytes_left`, `files_left`, `eta`, `active` downloads), `leftovers` (Clean up summary from the last check, or null), next run, new log lines |
-| `GET /api/tree?path=P` | Folder node and its children (counts, sizes, newest, synced, `state`, `own_*`, `own_state`, `disk_name` ("Saved as"), `name_set`, `saved_to` when a Folder map rule saves it elsewhere) |
+| `GET /api/tree?path=P` | Folder node and its children (counts, sizes, newest, synced, `state`, `own_*`, `own_state`, `place`, `custom`, `disk_path`, `moved`, `kids_to` for the Saved as column) |
 | `GET /api/search?q=` | Folders matching a name |
 | `GET /api/files?path=P` | Files directly in a folder with status |
 | `POST /api/select` `{path, include}` | Tick/untick a folder; `path` `"<folder>/."` = its own files only |
 | `POST /api/selection/clear` | Untick everything |
 | `POST /api/scan` `{root}` · `POST /api/sync` · `POST /api/stop` | Jobs (409 when busy) |
 | `GET/POST /api/settings` | Read / change settings (400 with a message on invalid values) |
-| `POST /api/folder-name` `{path, name}` | "Saved as": save this folder under `name` (`""` = the site's name) -> `{path, name, moved}`; 400 on a bad name, 409 while busy |
-| `GET /api/folder-map` | Folder map rules `{rules: [{site, local}]}` |
-| `POST /api/folder-map` `{rules}` | Replace the rules -> `{rules, moved}` (files whose place changed); 400 with a message on a bad rule, 409 while busy |
+| `POST /api/folder-place` `{path, place}` | Saved as: where this folder goes (`""` = as on the site) -> `{path, place, moved}`; 400 on a bad place, 409 while busy |
+| `POST /api/folder-kids` `{path, place}` | Where this folder's subfolders go (`"/"` = the download folder, `""` = inside it) -> same reply |
 | `GET /api/history` | Last jobs |
 | `GET /api/sync/files?kind=` | Files behind an Activity counter for the current/last sync: `kind` = `new`, `updated`, `resumed`, `uptodate`, `failed` -> `{total, files: [{t, kind, path, size, note}], job}` (max 2000) |
 | `GET /api/changes/days` | Change history per day: `[{day, counts: {kind: n}, bytes: {kind: b}}]`, newest first |
@@ -366,7 +365,7 @@ src/lolroms_sync/            the web app
                 (effective / effective_files / state_of / select / _fold)
   scanner.py    reads listing pages into the catalog; header_dirs() for header-only sections; prune
   cleanup.py    Clean up: walk the download folder, judge files (gone/part/unticked), delete confirmed ones
-  folder_map.py Folder map: site folder (with *) -> folder on disk
+  folder_map.py Saved as: where each site folder (and its subfolders) goes on disk
   static/       index.html, app.css, app.js - no build step, no CDN
   core/         the sync engine (from lolroms-downloader; its command-line tool was removed in 1.3.0)
     download.py   Downloader: plan() + download(), .part/resume, dates, permissions, run_item()

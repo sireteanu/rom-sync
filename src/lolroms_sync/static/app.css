@@ -162,15 +162,15 @@ h2 { font-size: 15px; font-weight: 600; }
 .row:hover .nodate, .nodate:focus-visible { opacity: 1; }
 .nodate:hover { color: var(--grape-ink); border-color: var(--grape-ink); }
 .nodate[hidden] { display: none; }
+.kids { flex: none; border: 0; background: none; color: var(--ink-2); cursor: pointer; padding: 2px; border-radius: var(--radius-s); opacity: 0; }
+.kids svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2; fill: none; display: block; }
+.row:hover .kids, .kids:focus-visible, .kids.on { opacity: 1; }
+.kids.on { color: var(--teal); }
+.kids:hover { color: var(--grape-ink); }
+.kids[hidden] { display: none; }
 .node.own-files .c-as > * { visibility: hidden; }
 .hint { color: var(--ink-2); font-size: 13px; margin: 0 0 12px; }
 .hint code { background: var(--field); padding: 1px 4px; border-radius: 3px; }
-.fmap-head, .fmap-row { display: grid; grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr) 30px; gap: 6px; align-items: center; }
-.fmap-head { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 4px; }
-.fmap-row { margin-bottom: 6px; }
-.fmap-row input { width: 100%; padding: 6px 8px; background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-s); font: inherit; font-size: 13px; }
-.fmap-row .arrow { text-align: center; color: var(--ink-2); }
-#fmap-rows:empty::before { content: "No rules yet - every folder is saved under its own name."; display: block; color: var(--ink-2); font-size: 13px; padding: 4px 0 10px; }
 .info { border: 0; background: none; color: var(--ink-2); cursor: pointer; padding: 4px; border-radius: var(--radius-s); }
 .info svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
 .info:hover { color: var(--grape-ink); }

@@ -82,23 +82,34 @@ Click **Sync selected**. Rom Sync:
 Run it again any time - it only ever fetches what's missing or changed. If you copied files into
 the download folder yourself, Rom Sync recognises them (by size) and doesn't download them again.
 
-**Saving folders under your own names (Saved as).** Next to each folder's name the tree has a
-**Saved as** column: the name that folder gets in your download folder. To change it, click it, type
-the new name and press **Enter**. The folder and everything in it are saved under that name; leave the
-field empty to use the site's name again. Renamed folders show their name in colour.
+**Choosing where folders go (Saved as).** Next to each folder's name the tree has a **Saved as**
+column: where that folder goes in your download folder. Click it, type, and press **Enter**:
+
+| You type | The folder goes to |
+|---|---|
+| `Archimedes` | the same place, under the new name |
+| `Extras/Archimedes` | a folder *Extras* in the same place |
+| `/Computers/Archimedes` | *Computers/Archimedes*, counted from the download folder |
+| *(empty)* | back to the site's name and place |
+
+Everything inside the folder goes along with it. Renamed folders show in colour, moved ones in italics;
+hover over the field to see exactly where the folder ends up.
+
+**Where its subfolders go.** Folders with subfolders have a small arrow next to the field. Click it to
+put every subfolder somewhere else, each under its own name (also subfolders the site adds later):
+`/` puts them straight in the download folder, so *SEGA/32X/Sub A* becomes just *Sub A*;
+`/Sega/32X Extras` puts them in that folder instead. The folder's own files stay where the folder is,
+and a subfolder's own Saved as still wins.
 
 Many folders on lolroms carry the date of their set, like *Archimedes (20231029-220453)*. Hover over
 the row and click **−date** to save it as just *Archimedes*. When the site later moves the folder to a
-newer date, your ticks and the name you gave it go along with it, and only new or changed files are
+newer date, your ticks and where you save it go along with it, and only new or changed files are
 downloaded.
 
-For more than renaming one folder, open ☰ → **Folder map**: there you can save a site folder anywhere
-in the download folder, or cover many folders with one rule using `*` for any text
-(`Acorn/Risc PC (*)` → `Acorn/Risc PC`).
-
-Files you already downloaded aren't moved when you rename a folder: move them into the new folder
-yourself before the next sync (Rom Sync recognises them by size), or let the sync download them again
-and remove the old copies with Clean up. Names can't be changed while a scan or sync runs.
+Files you already downloaded aren't moved when you change where a folder goes: move them yourself
+before the next sync (Rom Sync recognises them by size), or let the sync download them again and remove
+the old copies with Clean up. Saved as can't be changed while a scan or sync runs, and is hidden on a
+phone (not enough room).
 
 Every downloaded file gets the **date shown on the website**, so you can sort by date in your file
 manager to see what's new; folders get the date of their newest file. Files get permissions **777**

@@ -378,41 +378,70 @@ def test_a_sync_with_nothing_to_do_writes_nothing_to_the_disk(site, app_factory,
 
 
 
-def test_folder_map_saves_site_folders_elsewhere(site_factory, app_factory):
-    """Folder map: a site folder (matched with *) is saved under another folder name; the tree
-    shows where; Clean up doesn't flag those files; removing the rule moves them back."""
+def test_saved_as_moves_a_folder_and_its_subfolders(site_factory, app_factory):
+    """Saved as: a folder's own place (here a /path from the download folder), and where its
+    subfolders go (here the download folder itself); Clean up agrees; resetting moves them back."""
     from conftest import kids, on_disk, scan, select, sync
     site = site_factory("dated")
     c = app_factory(site)
     scan(c)
-    dated = "Acorn/Archimedes (20231029-220453)"
-    select(c, dated)
-    r = c.post("/api/folder-map", json={"rules": [{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}]})
+    select(c, "Atari/2600")
+    select(c, f"Acorn/{OLD_SET}")
+    r = c.post("/api/folder-place", json={"path": f"Acorn/{OLD_SET}", "place": "/Computers/Archimedes"})
     assert r.status_code == 200, r.text
-    assert c.get("/api/folder-map").json()["rules"] == [{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}]
-    assert kids(c, "Acorn")["Archimedes (20231029-220453)"]["saved_to"] == "Acorn/Archimedes"
-    assert kids(c)["Acorn"]["saved_to"] is None
+    assert c.post("/api/folder-kids", json={"path": "Atari", "place": "/"}).status_code == 200
+    node = kids(c, "Acorn")[OLD_SET]
+    assert (node["place"], node["custom"], node["disk_path"], node["moved"]) == \
+        ("/Computers/Archimedes", True, "Computers/Archimedes", True)
+    a = kids(c)["Atari"]
+    assert (a["kids_to"], a["custom"], a["moved"]) == ("/", False, False)
+    assert kids(c, "Atari")["2600"]["disk_path"] == "2600"
     sync(c)
-    assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z"}
+    assert on_disk(c.data) == {"Computers/Archimedes/Zarch.7z", "2600/Adventure (USA).7z",
+                               "2600/Pitfall! (USA).7z", "2600/Combat_ Tank _Plus_.7z"}
     assert c.get("/api/cleanup").json()["files"] == []
     n = len(site.file_requests())
-    sync(c)                                                   # nothing new to fetch
-    assert len(site.file_requests()) == n
-    # without the rule the file belongs in the site's folder again; the old copy is a leftover
-    assert c.post("/api/folder-map", json={"rules": []}).status_code == 200
     sync(c)
-    assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z", f"{dated}/Zarch.7z"}
+    assert len(site.file_requests()) == n
+    # back to the site's places: the next sync puts them there, old copies are leftovers
+    assert c.post("/api/folder-kids", json={"path": "Atari", "place": ""}).status_code == 200
+    assert kids(c, "Atari")["2600"]["disk_path"] == "Atari/2600"
+    sync(c)
     left = {f["path"]: f["reason"] for f in c.get("/api/cleanup").json()["files"]}
-    assert left == {"Acorn/Archimedes/Zarch.7z": "gone"}
+    assert set(left) == {"2600/Adventure (USA).7z", "2600/Pitfall! (USA).7z", "2600/Combat_ Tank _Plus_.7z"}
 
 
-def test_folder_map_bad_rules_are_refused(site, app_factory):
+def test_saved_as_refuses_bad_places(site, app_factory):
+    from conftest import kids, scan
     c = app_factory(site)
-    r = c.post("/api/folder-map", json={"rules": [{"site": "Acorn", "local": "../x"}]})
+    scan(c)
+    r = c.post("/api/folder-place", json={"path": "Atari", "place": "../x"})
     assert r.status_code == 400 and "can't be" in r.json()["error"]
-    # the generic settings endpoint can't change it behind the dialog's back
-    c.post("/api/settings", json={"folder_map": [{"site": "x", "local": "y"}]})
-    assert c.get("/api/folder-map").json()["rules"] == []
+    assert c.post("/api/folder-place", json={"path": "Atari", "place": "/"}).status_code == 400
+    # the generic settings endpoint can't change them behind the column's back
+    c.post("/api/settings", json={"folder_places": {"Atari": "x"}})
+    assert kids(c)["Atari"]["custom"] is False
+
+
+def test_old_folder_map_is_taken_over_at_start(site_factory, app_factory, tmp_path):
+    """1.3.10-1.4.2 Folder map rules and names become Saved as settings when 1.4.3 starts."""
+    import json
+    import sqlite3
+    from conftest import scan
+    site = site_factory("dated")
+    c = app_factory(site)
+    scan(c)
+    c.__exit__(None, None, None)
+    db = sqlite3.connect(tmp_path / "config" / "catalog.db")
+    db.execute("INSERT OR REPLACE INTO settings VALUES ('folder_map', ?)",
+               (json.dumps([{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}]),))
+    db.commit()
+    db.close()
+    c = app_factory(site)
+    from conftest import kids
+    node = kids(c, "Acorn")[OLD_SET]
+    assert (node["place"], node["disk_path"]) == ("/Acorn/Archimedes", "Acorn/Archimedes")
+    assert c.get("/api/settings").json()["settings"]["folder_map"] == []
 
 
 def test_paths_from_1_3_7_are_put_back_at_start(site_factory, app_factory, tmp_path):
@@ -451,13 +480,13 @@ def test_ticks_follow_a_folder_renamed_to_a_newer_set_date_in_a_scan(site_factor
     c = app_factory(site)
     scan(c)
     select(c, f"Acorn/{OLD_SET}")
-    c.post("/api/folder-map", json={"rules": [{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}]})
+    c.post("/api/folder-place", json={"path": f"Acorn/{OLD_SET}", "place": "Archimedes"})
     sync(c)
     rename_on_site(site)
     st = scan(c)
     assert any("renamed" in l["msg"] for l in c.get("/api/status", params={"log_since": 0}).json()["log"])
     k = kids(c, "Acorn")
-    assert OLD_SET not in k and k[NEW_SET]["state"] == "on" and k[NEW_SET]["saved_to"] == "Acorn/Archimedes"
+    assert OLD_SET not in k and k[NEW_SET]["state"] == "on" and k[NEW_SET]["disk_path"] == "Acorn/Archimedes"
     n = len(site.file_requests())
     sync(c)                                    # same files, same folder on disk: nothing to fetch
     assert len(site.file_requests()) == n
@@ -468,13 +497,13 @@ def test_ticks_follow_a_folder_renamed_to_a_newer_set_date_in_a_scan(site_factor
 
 def test_a_sync_finds_a_renamed_ticked_folder_by_itself(site_factory, app_factory):
     """No scan in between: the sync can't read the old folder, re-reads its parent, finds the
-    renamed folder and carries on; an exact Folder map rule follows the folder too."""
+    renamed folder and carries on; its Saved as place follows the folder too."""
     from conftest import kids, on_disk, scan, select, sync
     site = site_factory("dated")
     c = app_factory(site)
     scan(c)
     select(c, f"Acorn/{OLD_SET}")
-    c.post("/api/folder-map", json={"rules": [{"site": f"Acorn/{OLD_SET}", "local": "Acorn/Archimedes"}]})
+    c.post("/api/folder-place", json={"path": f"Acorn/{OLD_SET}", "place": "/Acorn/Archimedes"})
     sync(c)
     rename_on_site(site)
     site.files[f"Acorn/{NEW_SET}"].append("Lander.7z")         # the new set has one more game
@@ -483,7 +512,7 @@ def test_a_sync_finds_a_renamed_ticked_folder_by_itself(site_factory, app_factor
     assert len(site.file_requests()) == n + 1                  # only the new game
     assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z", "Acorn/Archimedes/Lander.7z"}
     assert kids(c, "Acorn")[NEW_SET]["state"] == "on"
-    assert c.get("/api/folder-map").json()["rules"] == [{"site": f"Acorn/{NEW_SET}", "local": "Acorn/Archimedes"}]
+    assert kids(c, "Acorn")[NEW_SET]["place"] == "/Acorn/Archimedes"
 
 
 def test_follow_renames_only_moves_ticks_to_a_folder_with_the_same_name(tmp_path):
@@ -500,29 +529,28 @@ def test_follow_renames_only_moves_ticks_to_a_folder_with_the_same_name(tmp_path
 
 
 def test_saved_as_names_a_folder_on_disk(site_factory, app_factory):
-    """The tree's "Saved as" column: a folder gets another name on disk, the tree shows it, the
-    name follows the folder when the site moves it to a newer set date, empty = the site's name."""
+    """A plain name renames the folder where it is; the name follows the folder when the site moves
+    it to a newer set date; empty = the site's name again."""
     from conftest import kids, on_disk, scan, select, sync
     site = site_factory("dated")
     c = app_factory(site)
     scan(c)
     select(c, f"Acorn/{OLD_SET}")
     node = kids(c, "Acorn")[OLD_SET]
-    assert (node["disk_name"], node["name_set"], node["saved_to"]) == (OLD_SET, False, None)
-    r = c.post("/api/folder-name", json={"path": f"Acorn/{OLD_SET}", "name": " Archimedes "})
-    assert r.status_code == 200, r.text
+    assert (node["place"], node["custom"], node["disk_path"]) == (OLD_SET, False, f"Acorn/{OLD_SET}")
+    assert c.post("/api/folder-place", json={"path": f"Acorn/{OLD_SET}", "place": " Archimedes "}).status_code == 200
     node = kids(c, "Acorn")[OLD_SET]
-    assert (node["disk_name"], node["name_set"], node["saved_to"]) == ("Archimedes", True, None)
+    assert (node["place"], node["custom"], node["disk_path"], node["moved"]) == \
+        ("Archimedes", True, "Acorn/Archimedes", False)
     sync(c)
     assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z"}
     rename_on_site(site)
     n = len(site.file_requests())
     sync(c)                                                    # the name went along: nothing to fetch
     assert len(site.file_requests()) == n
-    assert kids(c, "Acorn")[NEW_SET]["disk_name"] == "Archimedes"
-    assert c.post("/api/folder-name", json={"path": f"Acorn/{NEW_SET}", "name": ""}).status_code == 200
-    assert kids(c, "Acorn")[NEW_SET]["disk_name"] == NEW_SET
-    assert c.post("/api/folder-name", json={"path": "Acorn", "name": "a/b"}).status_code == 400
+    assert kids(c, "Acorn")[NEW_SET]["disk_path"] == "Acorn/Archimedes"
+    assert c.post("/api/folder-place", json={"path": f"Acorn/{NEW_SET}", "place": ""}).status_code == 200
+    assert kids(c, "Acorn")[NEW_SET]["disk_path"] == f"Acorn/{NEW_SET}"
 
 
 def test_follow_renames_knows_both_set_date_forms(tmp_path):

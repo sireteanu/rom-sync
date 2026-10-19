@@ -33,8 +33,10 @@ DEFAULT_SETTINGS = {
     "sync_every_hours": 0,          # 0 = off
     "full_scan_every_days": 7,      # 0 = off (only when sync schedule is on, or on its own)
     "data_dir": "",                 # set at start-up from --data unless changed in the UI
-    "folder_map": [],               # [{site, local}]: save site folders elsewhere (folder_map.py)
-    "folder_names": {},             # {site folder: name on disk} from the tree's "Saved as" column
+    "folder_map": [],               # 1.3.10-1.4.2 Folder map rules (converted to folder_places)
+    "folder_names": {},             # 1.4.1-1.4.2 "Saved as" names (converted to folder_places)
+    "folder_places": {},            # {site folder: place on disk} - "Saved as" (folder_map.py)
+    "folder_kids": {},              # {site folder: where its subfolders go} - "Saved as"
 }
 
 

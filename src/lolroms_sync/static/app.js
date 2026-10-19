@@ -160,15 +160,25 @@ function makeNode(n, depth, showPath = false) {
 const SET_DATE = /\s*\((\d{8}-\d{6}|\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})\)$/;
 function fillSavedAs(row, n) {
   const input = $(".as", row);
-  if (!input || document.activeElement === input) return;     // don't overwrite while typing
-  input.value = n.disk_name || "";
+  if (!input) return;
+  const kb = $(".kids", row);
+  kb.hidden = !n.has_children;
+  kb.classList.toggle("on", !!n.kids_to);
+  kb.title = n.kids_to
+    ? `Its subfolders go to ${n.kids_to === "/" ? "the download folder" : n.kids_to} - click to change`
+    : "Where its subfolders go (they stay inside it now)";
+  kb._kids = n.kids_to || "";
+  if (document.activeElement === input) return;     // don't overwrite while typing
+  input.value = n.place || "";
   input.dataset.orig = input.value;
-  input.classList.toggle("renamed", !!n.name_set);
-  input.classList.toggle("moved", !!n.saved_to);
+  input.dataset.custom = n.custom ? "1" : "";
+  input.classList.toggle("renamed", !!n.custom);
+  input.classList.toggle("moved", !!n.moved);
   input.placeholder = n.name || "";
-  input.title = (n.saved_to ? `Saved in ${n.saved_to} (Folder map)` : `Saved in the download folder as "${input.value}"`)
-    + "\nType a new name and press Enter. Leave it empty to use the site's name.";
-  input.setAttribute("aria-label", `Name in the download folder for ${n.path}`);
+  input.title = `Saved in: ${n.disk_path || "(the download folder)"}`
+    + "\nType a new name or place and press Enter (Archimedes, Extras/Archimedes, /Sega/Archimedes)."
+    + "\nLeave it empty to save it as on the site.";
+  input.setAttribute("aria-label", `Where ${n.path} is saved`);
   $(".nodate", row).hidden = !SET_DATE.test(input.value);
 }
 async function saveName(el, input, value) {
@@ -176,7 +186,7 @@ async function saveName(el, input, value) {
   if (value === input.dataset.orig || input.classList.contains("saving")) return;
   input.classList.add("saving");
   try {
-    await api("/api/folder-name", { method: "POST", body: { path: el.dataset.path, name: value } });
+    await api("/api/folder-place", { method: "POST", body: { path: el.dataset.path, place: value } });
     input.dataset.orig = value;
     input.blur();
     await refreshVisible();
@@ -197,6 +207,10 @@ function wireSavedAs(el) {
   });
   input.addEventListener("blur", () => {
     if (!input.classList.contains("saving") && input.value.trim() !== input.dataset.orig) saveName(el, input, input.value);
+  });
+  $(".kids", row).addEventListener("click", (e) => {
+    e.stopPropagation();
+    openKids(el.dataset.path, e.currentTarget._kids);
   });
   $(".nodate", row).addEventListener("click", (e) => {
     e.stopPropagation();
@@ -678,57 +692,25 @@ $("#settings-save").addEventListener("click", async (e) => {
   }
 });
 
-/* ---------------------------------------------------------------- folder map */
-function fmapRow(site = "", local = "") {
-  const r = document.createElement("div");
-  r.className = "fmap-row";
-  r.innerHTML = `<input class="f-site" placeholder="Acorn/Archimedes (*)" aria-label="Folder on the site">
-    <span class="arrow" aria-hidden="true">\u2192</span>
-    <input class="f-local" placeholder="Acorn/Archimedes" aria-label="Save in this folder">
-    <button type="button" class="btn icon" title="Remove this rule" aria-label="Remove rule">\u2715</button>`;
-  $(".f-site", r).value = site;
-  $(".f-local", r).value = local;
-  $("button", r).addEventListener("click", () => r.remove());
-  $("#fmap-rows").append(r);
-  return r;
+/* ---------------------------------------------------------------- where subfolders go */
+let kidsPath = null;
+function openKids(path, current) {
+  kidsPath = path;
+  $("#kids-folder").textContent = path;
+  $("#kids-place").value = current || "";
+  $("#kids-error").hidden = true;
+  $("#kids-dlg").showModal();
+  $("#kids-place").focus();
 }
-// does a Folder map rule's site folder (with *) name exactly this folder?
-function ruleNames(site, path) {
-  const a = site.split("/").filter(Boolean), b = path.split("/");
-  if (a.length !== b.length) return false;
-  return a.every((seg, i) => new RegExp("^" + seg.split("*").map((t) => t.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$", "i").test(b[i]));
-}
-async function openFolderMap(path) {
-  const { rules } = await api("/api/folder-map");
-  $("#fmap-rows").innerHTML = "";
-  let focus = null;
-  for (const r of rules) {
-    const el = fmapRow(r.site, r.local);
-    if (path && !focus && ruleNames(r.site, path)) focus = el;
-  }
-  if (path && !focus) {
-    // a new rule for the folder clicked in the tree; a dated folder gets "(*)" so the rule keeps
-    // working when the site moves it to a newer set
-    const dated = SET_DATE.test(path);
-    focus = fmapRow(dated ? path.replace(SET_DATE, " (*)") : path, path.replace(SET_DATE, ""));
-  }
-  $("#fmap-error").hidden = true;
-  $("#fmap-dlg").showModal();
-  if (focus) { const i = $(".f-local", focus); i.focus(); i.select(); }
-}
-$("#btn-fmap").addEventListener("click", () => openFolderMap(""));
-$("#fmap-add").addEventListener("click", () => $(".f-site", fmapRow()).focus());
-$("#fmap-save").addEventListener("click", async (e) => {
+$("#kids-save").addEventListener("click", async (e) => {
   e.preventDefault();
-  const rules = [...document.querySelectorAll("#fmap-rows .fmap-row")].map((r) =>
-    ({ site: $(".f-site", r).value.trim(), local: $(".f-local", r).value.trim() }));
   try {
-    await api("/api/folder-map", { method: "POST", body: { rules } });
-    $("#fmap-dlg").close();
+    await api("/api/folder-kids", { method: "POST", body: { path: kidsPath, place: $("#kids-place").value } });
+    $("#kids-dlg").close();
     await refreshVisible();
     poll(true);
   } catch (err) {
-    const p = $("#fmap-error");
+    const p = $("#kids-error");
     p.textContent = "Not saved: " + err.message;
     p.hidden = false;
   }

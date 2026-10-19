@@ -17,7 +17,6 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .catalog import OWN
 from .engine import Engine, parse_types
-from .folder_map import FolderMap
 
 log = logging.getLogger("dircrawl")
 
@@ -39,17 +38,19 @@ def node_json(engine: Engine, tree: dict, rules: dict, path: str) -> dict:
 
 
 def _saved_as(engine: Engine, path: str) -> dict:
-    """The tree's "Saved as" column: this folder's name on disk, and its whole path when a Folder
-    map rule puts it somewhere else."""
+    """The tree's "Saved as" column: what the field shows (the folder's own setting, or its site
+    name), its whole place on disk, and where its subfolders go."""
     if not path:
-        return {"disk_name": "", "name_set": False, "saved_to": None}
-    disk = engine.fmap.disk_folder(path)
-    plain = FolderMap().disk_folder(path)
-    named = path.casefold() in {k.casefold() for k in engine.fmap.names}
-    return {"disk_name": disk.rsplit("/", 1)[-1], "name_set": named,
-            # the full place on disk when it isn't just the site's place with this folder renamed
-            "saved_to": disk if disk.rsplit("/", 1)[0] != plain.rsplit("/", 1)[0] or
-            (disk != plain and not named) else None}
+        return {"place": "", "custom": False, "disk_path": "", "moved": False,
+                "kids_to": engine.fmap.kids_of("")}
+    fm = engine.fmap
+    disk = fm.disk_folder(path)
+    parent = path.rsplit("/", 1)[0] if "/" in path else ""
+    place = fm.place_of(path)
+    return {"place": place or path.rsplit("/", 1)[-1], "custom": bool(place), "disk_path": disk,
+            # not in its parent's folder on disk (its own / path, or its parent's subfolder setting)
+            "moved": (disk.rsplit("/", 1)[0] if "/" in disk else "") != fm.disk_folder(parent),
+            "kids_to": fm.kids_of(path)}
 
 
 def create_app(engine_factory, password: Optional[str] = None, on_restart=None, on_shutdown=None) -> FastAPI:
@@ -186,29 +187,22 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
         except (ValueError, Exception) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
-    @app.post("/api/folder-name")
-    async def set_folder_name(body: dict = Body(...)):
+    async def _place(body: dict, kids: bool):
         try:
-            return eng().set_folder_name(body.get("path"), body.get("name"))
+            return eng().set_place(body.get("path") or "", body.get("place"), kids=kids)
         except RuntimeError:
             return JSONResponse({"error": "Wait until the scan or sync has finished, then try again."},
                                 status_code=409)
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
-    @app.get("/api/folder-map")
-    async def get_folder_map():
-        return {"rules": eng().fmap.rules}
+    @app.post("/api/folder-place")
+    async def folder_place(body: dict = Body(...)):
+        return await _place(body, kids=False)
 
-    @app.post("/api/folder-map")
-    async def set_folder_map(body: dict = Body(...)):
-        try:
-            return eng().set_folder_map(body.get("rules"))
-        except RuntimeError:
-            return JSONResponse({"error": "Wait until the scan or sync has finished, then save again."},
-                                status_code=409)
-        except ValueError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
+    @app.post("/api/folder-kids")
+    async def folder_kids(body: dict = Body(...)):
+        return await _place(body, kids=True)
 
     @app.get("/api/history")
     async def history():

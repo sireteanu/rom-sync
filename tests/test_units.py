@@ -94,7 +94,7 @@ def test_rel_path_mirrors_site_folders():
     url = "https://lolroms.com/?file=Acorn%2FRisc+PC+%28Flux%29+%2820230506-040449%29%2FSub%2FX+%2820230506-040449%29.7z"
     assert r.rel_path(url) == "Acorn/Risc PC (Flux) (20230506-040449)/Sub/X (20230506-040449).7z"
     from lolroms_sync.folder_map import FolderMap
-    fm = FolderMap([{"site": "acorn/risc pc (*)", "local": "Acorn/Risc PC: Flux"}])
+    fm = FolderMap({"acorn/risc pc (flux) (20230506-040449)": "Risc PC: Flux"})
     assert r.rel_path(url, fm) == "Acorn/Risc PC_ Flux/Sub/X (20230506-040449).7z"   # names made safe
 
 
@@ -139,44 +139,52 @@ def test_extract_include_nav_still_ignores_sortbar_and_back():
     assert "https://lolroms.com/?dir=Atari%2FBack" not in links
 
 
-def test_folder_map_matching():
+def test_saved_as_places():
+    """A folder's own place (a name, a path below its parent's place, or /path from the download
+    folder) and where its subfolders go; everything below follows; keys ignore case."""
     from lolroms_sync.folder_map import FolderMap
-    fm = FolderMap(FolderMap.clean([
-        {"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"},
-        {"site": "Acorn/*", "local": "Acorn/Other"},
-        {"site": "", "local": ""},                                   # empty dialog row: ignored
-    ]))
-    assert len(fm) == 2
-    assert fm.disk_folder("Acorn/Archimedes (20231029-220453)") == "Acorn/Archimedes"
-    assert fm.disk_folder("Acorn/ARCHIMEDES (20261001-000000)/Demos") == "Acorn/Archimedes/Demos"
-    assert fm.disk_folder("Acorn/Atom (Tapes)") == "Acorn/Other"       # first matching rule wins
-    assert fm.disk_folder("Acorn") == "Acorn" and fm.disk_folder("Atari/5200") == "Atari/5200"
-    assert fm.rule_at("Acorn/Archimedes (1)")["local"] == "Acorn/Archimedes"
-    assert fm.rule_at("Acorn/Archimedes (1)/Demos") is None            # only the mapped folder itself
-    assert FolderMap().disk_folder("A: B/C") == "A_ B/C"
+    fm = FolderMap(
+        places={"Acorn/Archimedes (2023)": "Archimedes", "SEGA/32X/Sub B": "/Sega/B only",
+                "Atari/2600": "Extras/2600"},
+        kids={"sega/32x": "/", "Nintendo": "/Sega/Nested"})
+    assert fm.disk_folder("Acorn/Archimedes (2023)/Demos") == "Acorn/Archimedes/Demos"
+    assert fm.disk_folder("SEGA/32X") == "SEGA/32X"                   # the folder itself stays put
+    assert fm.disk_folder("SEGA/32X/Sub A/Deep") == "Sub A/Deep"      # its subfolders go to the base
+    assert fm.disk_folder("SEGA/32X/Sub B") == "Sega/B only"          # a subfolder's own place wins
+    assert fm.disk_folder("Nintendo/SNES") == "Sega/Nested/SNES"      # nested in another folder
+    assert fm.disk_folder("Atari/2600/x") == "Atari/Extras/2600/x"    # a path below the parent's place
+    assert fm.disk_folder("Atari/5200") == "Atari/5200"
+    assert fm.kids_of("SEGA/32X") == "/" and fm.place_of("acorn/archimedes (2023)") == "Archimedes"
 
 
-@pytest.mark.parametrize("rules, error", [
-    ([{"site": "", "local": "x"}], "enter the site folder"),
-    ([{"site": "Acorn", "local": ""}], "enter the folder to save it in"),
-    ([{"site": "Acorn", "local": "../x"}], "can't be . or .."),
-    ([{"site": "Acorn", "local": "A*"}], "only be used in the site folder"),
-    ([{"site": "Acorn", "local": "A"}, {"site": "acorn/", "local": "B"}], "twice"),
-    ("nope", "must be a list"),
+@pytest.mark.parametrize("value, kids, out", [
+    ("  Archimedes ", False, "Archimedes"),
+    ("/Sega//32X Extras/", False, "/Sega/32X Extras"),
+    ("a\\b", False, "a/b"),
+    ("", False, ""),
+    ("/", True, "/"),
 ])
-def test_folder_map_rejects_bad_rules(rules, error):
-    from lolroms_sync.folder_map import FolderMap
+def test_clean_place(value, kids, out):
+    from lolroms_sync.folder_map import clean_place
+    assert clean_place(value, kids=kids) == out
+
+
+@pytest.mark.parametrize("value, kids, error", [
+    ("../x", False, "can't be . or .."),
+    ("a*", False, "can't contain *"),
+    ("/", False, "enter a folder name"),
+])
+def test_clean_place_rejects(value, kids, error):
+    from lolroms_sync.folder_map import clean_place
     with pytest.raises(ValueError, match=re.escape(error)):
-        FolderMap.clean(rules)
+        clean_place(value, kids=kids)
 
 
-def test_folder_names_win_at_their_folder():
-    from lolroms_sync.folder_map import FolderMap
-    fm = FolderMap([{"site": "SEGA (*)", "local": "Consoles/Sega"}],
-                   {"acorn/archimedes (2023)": "Archimedes", "SEGA (1)": "SEGA", "Acorn": "ACORN"})
-    assert fm.disk_folder("Acorn/Archimedes (2023)/Demos") == "ACORN/Archimedes/Demos"
-    assert fm.disk_folder("SEGA (1)/Saturn") == "Consoles/SEGA/Saturn"     # rule places it, name names it
-    assert fm.disk_folder("SEGA (2)/Saturn") == "Consoles/Sega/Saturn"
-    with pytest.raises(ValueError):
-        FolderMap.clean_name("a/b")
-    assert FolderMap.clean_name("  ") == ""
+def test_old_folder_map_rules_and_names_are_taken_over():
+    from lolroms_sync.folder_map import from_old_settings
+    places, kids = from_old_settings(
+        [{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}, {"site": "SEGA (*)", "local": "Sega"}],
+        {"Atari/2600": "VCS", "SEGA (1)": "SEGA"},
+        ["", "Acorn", "Acorn/Archimedes (2023)", "Atari", "Atari/2600", "SEGA (1)", "SEGA (1)/Saturn"])
+    assert places == {"Atari/2600": "VCS", "Acorn/Archimedes (2023)": "/Acorn/Archimedes", "SEGA (1)": "/SEGA"}
+    assert kids == {}

@@ -5,6 +5,21 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-10-19
+
+### Changed
+- **Everything about where folders go now lives in the folder tree**; the Folder map dialog is gone.
+  The **Saved as** column takes a name (`Archimedes`, renamed in place), a path inside the same place
+  (`Extras/Archimedes`) or a path counted from the download folder (`/Sega/Archimedes`). Your Folder
+  map rules are taken over automatically for the folders they matched.
+
+### New
+- **Where its subfolders go**: the arrow button next to Saved as (on folders with subfolders) puts
+  every subfolder in another folder, each under its own name, including ones the site adds later.
+  `/` puts them straight in the download folder (e.g. every subfolder of SEGA/32X at the base);
+  `/Sega/32X Extras` nests them there. The folder's own files stay where the folder is, and a
+  subfolder's own Saved as still wins.
+
 ## [1.4.2] - 2026-10-19
 
 ### Fixed

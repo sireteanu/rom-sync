@@ -65,15 +65,15 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   `confirm: true`, refuses while busy, and re-checks so only current leftovers are removed; then
   empty folders go, `Manifest.forget()` and `Catalog.forget_local()`. Never delete anything else
   from the download folder.
-- **Saved as** column (tree, `folder_names` setting, `/api/folder-name`) is the main way to rename
-  folders on disk - the owner renames almost every folder, so keep it fast (Enter / blur saves,
-  "−date" button). **Folder map** (`folder_map.py`, setting `folder_map`, `/api/folder-map`,
-  ☰ → Folder map) holds `*` rules and moves. Both are edited in the page only (no text file). Saving them, and every
-  start, runs `Catalog.remap(engine.rel_of)` so catalog paths always match the rules.
+- **Saved as** (tree column + the arrow "where its subfolders go"; settings `folder_places` /
+  `folder_kids`; `/api/folder-place`, `/api/folder-kids`; `folder_map.py`) is the *only* place to
+  decide where folders go - the owner wants everything in the main interface, no separate rules
+  dialog and no text file. Keep it fast: the owner renames almost every folder (Enter / blur saves,
+  "−date" button). Saving, and every start, runs `Catalog.remap(engine.rel_of)`.
 - **Renamed folders**: lolroms renames dated folders when a newer set arrives. `Catalog.follow_renames()`
   (after every finished scan) moves ticks from a vanished folder to its same-stem sibling
   (`catalog.SET_DATE`/`set_stem`); `Engine._scan` re-reads only the parent of a ticked dated folder
-  it couldn't read (`recurse=False`), then refreshes the new folder; exact Folder map rules follow.
+  it couldn't read (`recurse=False`), then refreshes the new folder; Saved as settings follow.
   Never rename folders on disk automatically.
 - **Change history** (`changes` table, `Catalog.add_change`): a sync records new/updated/resumed/failed
   per file (job = the sync's start time), Clean up records deleted; pruned after 365 days. Activity
@@ -119,7 +119,7 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
    class/ids (`Config.ignore_nav`), and always `.sortbar` / `.back` (lolroms' sort bar and
    "⬅ Back" link).
 5. **Downloads** go to `<folder>/<path from the file URL>` (folder segments go through the user's
-   Folder map, `folder_map.py`, in `UrlRules.rel_path()`; file names never change; Clean up maps
+   Saved as settings, `folder_map.py`, in `UrlRules.rel_path()`; file names never change; Clean up maps
    catalog folders to disk with the same `FolderMap.disk_folder()`, so both must stay in step;
    no automatic renaming of folders - the owner wants mapping done only by their rules), written as `.part` and renamed only when
    complete; retries resume with `Range` + `If-Range`. A `text/html` response for a file is rejected,

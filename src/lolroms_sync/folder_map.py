@@ -1,21 +1,21 @@
-"""Folder map: save a site folder (and everything below it) to a different folder on disk.
+"""Where each site folder is saved on disk - set in the folder tree's "Saved as" column.
 
-Two kinds, both stored in the catalog:
-- Folder names (setting `folder_names`, {site folder: name}): typed in the tree's "Saved as"
-  column. The folder keeps its place but gets another name on disk ("Archimedes (20231029-220453)"
-  -> "Archimedes"); its subfolders follow. Names win over rules for that exact folder.
-- Rules (setting `folder_map`, [{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}]):
-  set in the Folder map dialog, for moving folders elsewhere or matching many with *.
+Two settings in the catalog, both keyed by site folder path ("SEGA/32X"):
+- `folder_places` {folder: place}: where that folder goes.
+    "Archimedes"             a plain name: renamed, in its parent's folder on disk
+    "Extras/Sub A"           a path: under its parent's folder on disk
+    "/Sega/32X Extras/Sub A" starts with /: counted from the download folder itself
+- `folder_kids` {folder: place}: where that folder's subfolders go, each under its own name
+  (also subfolders the site adds later). Same forms; "/" = the download folder itself.
+    {"SEGA/32X": "/"}                  SEGA/32X/Sub A -> Sub A
+    {"SEGA/32X": "/Sega/32X Extras"}   SEGA/32X/Sub A -> Sega/32X Extras/Sub A
+  A subfolder's own place wins over its parent's subfolder setting. Files directly in the folder
+  stay with the folder.
 
-- `site` is a folder path on lolroms.com; `*` matches any text inside one folder name, so a rule
-  keeps working when the site renames "Archimedes (20231029-220453)" to a newer date.
-- `local` is the folder inside the download folder that gets those files. Subfolders follow:
-  "<site folder>/Sub/x.7z" is saved as "<local>/Sub/x.7z".
-- The first rule that matches a folder wins. Matching ignores upper/lower case.
+Everything below a folder follows it. File names never change. Keys match ignoring case.
 """
 from __future__ import annotations
 
-import re
 from typing import Optional
 
 from .core.util import safe_segment
@@ -25,83 +25,48 @@ def _segments(path: str) -> list:
     return [s.strip() for s in path.replace("\\", "/").split("/") if s.strip()]
 
 
-def _compile(segment: str):
-    return re.compile("".join(".*" if c == "*" else re.escape(c) for c in segment), re.IGNORECASE)
+def clean_place(value, kids: bool = False) -> str:
+    """A place typed in the page -> tidy text ("" = the default). ValueError says what to fix."""
+    raw = str(value or "").strip().replace("\\", "/")
+    if not raw:
+        return ""
+    absolute = raw.startswith("/")
+    segs = _segments(raw)
+    if any(s in (".", "..") for s in segs):
+        raise ValueError("folder names can't be . or ..")
+    if any("*" in s for s in segs):
+        raise ValueError("folder names can't contain *")
+    if not segs:
+        if absolute and kids:
+            return "/"                     # subfolders straight into the download folder
+        raise ValueError("enter a folder name")
+    return ("/" if absolute else "") + "/".join(segs)
 
 
 class FolderMap:
-    def __init__(self, rules: Optional[list] = None, names: Optional[dict] = None):
-        """rules: [{"site": ..., "local": ...}] (checked with FolderMap.clean() first);
-        names: {site folder: name on disk} (checked with FolderMap.clean_name())."""
-        self.rules = list(rules or [])
-        self.names = dict(names or {})
-        self._names = {k.casefold(): v for k, v in self.names.items()}
-        self._compiled = [([_compile(s) for s in _segments(r["site"])], _segments(r["local"]))
-                          for r in self.rules]
+    def __init__(self, places: Optional[dict] = None, kids: Optional[dict] = None):
+        self.places = dict(places or {})
+        self.kids = dict(kids or {})
+        self._places = {k.casefold(): v for k, v in self.places.items()}
+        self._kids = {k.casefold(): v for k, v in self.kids.items()}
 
-    def __len__(self) -> int:
-        return len(self.rules)
+    def __bool__(self) -> bool:
+        return bool(self.places or self.kids)
 
     @staticmethod
-    def clean(rules) -> list:
-        """Check rules from the page -> tidy list; ValueError says what to fix."""
-        if not isinstance(rules, list):
-            raise ValueError("folder map must be a list of rules")
-        out, seen = [], set()
-        for i, r in enumerate(rules, 1):
-            if not isinstance(r, dict):
-                raise ValueError(f"rule {i} is not a site folder / local folder pair")
-            site = "/".join(_segments(str(r.get("site") or "")))
-            local = "/".join(_segments(str(r.get("local") or "")))
-            if not site and not local:
-                continue                                    # an empty row in the dialog
-            if not site:
-                raise ValueError(f"rule {i}: enter the site folder")
-            if not local:
-                raise ValueError(f"rule {i} ({site}): enter the folder to save it in")
-            if any(s in (".", "..") for s in _segments(site) + _segments(local)):
-                raise ValueError(f"rule {i} ({site}): folder names can't be . or ..")
-            if "*" in local:
-                raise ValueError(f"rule {i} ({site}): * can only be used in the site folder")
-            if site.casefold() in seen:
-                raise ValueError(f"rule {i}: {site} is in the folder map twice")
-            seen.add(site.casefold())
-            out.append({"site": site, "local": local})
-        return out
-
-    @staticmethod
-    def clean_name(name) -> str:
-        """A name typed in the "Saved as" column -> tidy name; "" = use the site's name."""
-        name = str(name or "").strip()
-        if not name:
-            return ""
-        if "/" in name or "\\" in name:
-            raise ValueError("a folder name can't contain / or \\ - use Folder map to move a folder elsewhere")
-        if name in (".", ".."):
-            raise ValueError("a folder name can't be . or ..")
-        if "*" in name:
-            raise ValueError("a folder name can't contain *")
-        return name
-
-    def _match(self, parts: list):
-        """(rule index, its target, the folder segments it matched) for the first matching rule."""
-        for i, (pat, target) in enumerate(self._compiled):
-            if len(pat) <= len(parts) and all(p.fullmatch(s) for p, s in zip(pat, parts)):
-                return i, target, len(pat)
-        return None
+    def _apply(base: list, place: str) -> list:
+        return _segments(place) if place.startswith("/") else base + _segments(place)
 
     def map_parts(self, parts: list) -> list:
         """Folder segments as on the site -> folder segments on disk (not yet made safe)."""
-        hit = self._match(parts)
-        out, start = [], 0
-        if hit is not None:
-            _i, target, start = hit
-            out = list(target)
-            own = self._names.get("/".join(parts[:start]).casefold())
-            if own and out:
-                out[-1] = own                   # a name typed for that exact folder wins
-        for i in range(start, len(parts)):
-            out.append(self._names.get("/".join(parts[:i + 1]).casefold()) or parts[i])
+        out: list = []
+        for i, seg in enumerate(parts):
+            base = out
+            kids = self._kids.get("/".join(parts[:i]).casefold())
+            if kids is not None:
+                base = self._apply(out, kids)
+            place = self._places.get("/".join(parts[:i + 1]).casefold())
+            out = self._apply(base, place) if place else base + [seg]
         return out
 
     def disk_folder(self, site_path: str) -> str:
@@ -111,10 +76,37 @@ class FolderMap:
             return ""
         return "/".join(safe_segment(s) for s in self.map_parts(site_path.split("/")))
 
-    def rule_at(self, site_path: str) -> Optional[dict]:
-        """The rule that maps exactly this folder (not one of its parents), for the tree."""
-        parts = site_path.split("/") if site_path else []
-        hit = self._match(parts)
-        if hit is None or hit[2] != len(parts):
-            return None
-        return dict(self.rules[hit[0]], index=hit[0])
+    def place_of(self, site_path: str) -> str:
+        return self._places.get(site_path.casefold(), "")
+
+    def kids_of(self, site_path: str) -> Optional[str]:
+        return self._kids.get(site_path.casefold())
+
+    @staticmethod
+    def renamed(d: dict, rename) -> dict:
+        """Re-key a setting after the site renamed folders: rename(path) -> new path."""
+        return {rename(k): v for k, v in d.items()}
+
+
+def from_old_settings(rules: list, names: dict, folders) -> tuple:
+    """1.3.10-1.4.2 kept Folder map rules ([{site with *, local}]) and "Saved as" names. -> (places,
+    kids) for the folders the catalog knows, so nothing a user set up is lost."""
+    import re
+    places = {k: v for k, v in (names or {}).items() if k and v}
+    pats = []
+    for r in rules or []:
+        site, local = str(r.get("site") or ""), str(r.get("local") or "")
+        if not site or not local:
+            continue
+        rx = [re.compile("".join(".*" if c == "*" else re.escape(c) for c in s), re.IGNORECASE)
+              for s in _segments(site)]
+        pats.append((rx, "/" + "/".join(_segments(local))))
+    for folder in sorted(folders, key=lambda p: p.count("/")):
+        parts = folder.split("/") if folder else []
+        for rx, local in pats:
+            if len(rx) == len(parts) and all(p.fullmatch(s) for p, s in zip(rx, parts)):
+                own = places.get(folder)
+                # an old name on the same folder renamed the rule's last folder
+                places[folder] = (local.rsplit("/", 1)[0] + "/" + own) if own else local
+                break
+    return places, {}
