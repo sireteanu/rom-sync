@@ -46,8 +46,15 @@ def parent_of(path: str) -> str:
 
 
 # lolroms names many folders after their set's date and renames them when a newer set arrives:
-# "Acorn/Archimedes (20231029-220453)" -> "Acorn/Archimedes (20261001-120000)"
-SET_DATE = re.compile(r"\s*\((\d{8}-\d{6})\)$")
+# "Acorn/Archimedes (20231029-220453)" -> "Acorn/Archimedes (20261001-120000)". Some folders use a
+# second form: "NEC/PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)".
+SET_DATE = re.compile(r"\s*\((\d{8}-\d{6}|\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})\)$")
+
+
+def set_date_key(name: str) -> str:
+    """The set date as 14 digits (both forms compare correctly), "" when the name has none."""
+    m = SET_DATE.search(name)
+    return re.sub(r"\D", "", m.group(1)) if m else ""
 
 
 def set_stem(name: str) -> str:
@@ -282,7 +289,7 @@ class Catalog:
                     if not hits:
                         return None
                     # newest set first, if the site lists more than one
-                    name, new = max(hits, key=lambda h: (SET_DATE.search(h[0]) or [None, ""])[1])
+                    name, new = max(hits, key=lambda h: set_date_key(h[0]))
                     renames["/".join(parts[:i + 1])] = new
                     cur = new
                 return cur

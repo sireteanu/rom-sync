@@ -523,3 +523,14 @@ def test_saved_as_names_a_folder_on_disk(site_factory, app_factory):
     assert c.post("/api/folder-name", json={"path": f"Acorn/{NEW_SET}", "name": ""}).status_code == 200
     assert kids(c, "Acorn")[NEW_SET]["disk_name"] == NEW_SET
     assert c.post("/api/folder-name", json={"path": "Acorn", "name": "a/b"}).status_code == 400
+
+
+def test_follow_renames_knows_both_set_date_forms(tmp_path):
+    """lolroms writes set dates as (20231029-220453) and as (2026-10-14 05-51-53); a folder can
+    move from one form to the other, and the newest date wins whatever its form."""
+    from lolroms_sync.catalog import Catalog, set_stem
+    assert set_stem("PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)") == "pc engine cd & turbografx cd"
+    cat = Catalog(str(tmp_path / "catalog.db"))
+    cat.add_dirs({"NEC", "NEC/PC Engine CD (2026-10-14 05-51-53)", "NEC/PC Engine CD (20251001-000000)"}, 1)
+    cat.db.execute("INSERT INTO selection VALUES ('NEC/PC Engine CD (20240101-000000)', 1)")
+    assert cat.follow_renames() == {"NEC/PC Engine CD (20240101-000000)": "NEC/PC Engine CD (2026-10-14 05-51-53)"}

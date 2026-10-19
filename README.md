@@ -176,7 +176,7 @@ downloaded before:
   catalog folders to disk with the same map; several site folders may share one disk folder.
 - **Renamed folders** (`Catalog.follow_renames()`, run after every finished scan): a ticked folder the
   site no longer lists, whose parent now lists a folder with the same name apart from the set date
-  (` (YYYYMMDD-HHMMSS)` at the end; the newest if there are several), gets its selection rules moved
+  (either form, see the lolroms facts below; the newest if there are several), gets its selection rules moved
   there; Folder map rules naming it exactly (no `*`) follow (`Engine._follow_map_renames`). During
   the pre-sync refresh, a ticked dated folder that can't be read makes the engine read its parent's
   listing only (`Scanner.run(parent, recurse=False)`), follow the rename, and refresh the new folder.
@@ -423,5 +423,7 @@ Verified in a browser (October 2026). If the site changes, these are the first t
 - File responses: `Content-Length`, `Accept-Ranges: bytes`, `Content-Disposition`, served through
   Cloudflare; **no `Last-Modified` or `ETag`**.
 - When the daily download limit is reached the site serves an HTML page instead of the file.
-- Many folders carry the dump set's date: `Archimedes (20231029-220453)`, `Risc PC (Flux) (20230506-040449)`
-  (pattern ` (YYYYMMDD-HHMMSS)` at the end of the name; seen October 2026).
+- Many folders carry the dump set's date at the end of the name, in two forms:
+  `Archimedes (20231029-220453)` (` (YYYYMMDD-HHMMSS)`) and
+  `PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)` (` (YYYY-MM-DD HH-MM-SS)`); seen October 2026.
+  `catalog.SET_DATE` and `SET_DATE` in app.js match both.

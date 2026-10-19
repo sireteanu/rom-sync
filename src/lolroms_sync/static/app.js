@@ -155,7 +155,9 @@ function makeNode(n, depth, showPath = false) {
 
 /* "Saved as" column: the folder's name in the download folder. Type a name + Enter (or leave the
    field) to save it under that name; empty = the site's name again. "-date" drops the set date. */
-const SET_DATE = /\s*\(\d{8}-\d{6}\)$/;     // "Archimedes (20231029-220453)": the set's date
+// the set's date at the end of a folder name: "Archimedes (20231029-220453)" or
+// "PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)"
+const SET_DATE = /\s*\((\d{8}-\d{6}|\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})\)$/;
 function fillSavedAs(row, n) {
   const input = $(".as", row);
   if (!input || document.activeElement === input) return;     // don't overwrite while typing

@@ -5,6 +5,12 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-19
+
+### Fixed
+- **−date** and following renamed folders also work for folders dated like
+  "PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)", not only "Archimedes (20231029-220453)".
+
 ## [1.4.1] - 2026-10-19
 
 ### New
