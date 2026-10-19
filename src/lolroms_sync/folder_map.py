@@ -1,7 +1,11 @@
 """Folder map: save a site folder (and everything below it) to a different folder on disk.
 
-Rules are set in the page's Folder map dialog and stored in the catalog (setting `folder_map`) as
-[{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}, ...].
+Two kinds, both stored in the catalog:
+- Folder names (setting `folder_names`, {site folder: name}): typed in the tree's "Saved as"
+  column. The folder keeps its place but gets another name on disk ("Archimedes (20231029-220453)"
+  -> "Archimedes"); its subfolders follow. Names win over rules for that exact folder.
+- Rules (setting `folder_map`, [{"site": "Acorn/Archimedes (*)", "local": "Acorn/Archimedes"}]):
+  set in the Folder map dialog, for moving folders elsewhere or matching many with *.
 
 - `site` is a folder path on lolroms.com; `*` matches any text inside one folder name, so a rule
   keeps working when the site renames "Archimedes (20231029-220453)" to a newer date.
@@ -26,9 +30,12 @@ def _compile(segment: str):
 
 
 class FolderMap:
-    def __init__(self, rules: Optional[list] = None):
-        """rules: [{"site": ..., "local": ...}] - checked with FolderMap.clean() first."""
+    def __init__(self, rules: Optional[list] = None, names: Optional[dict] = None):
+        """rules: [{"site": ..., "local": ...}] (checked with FolderMap.clean() first);
+        names: {site folder: name on disk} (checked with FolderMap.clean_name())."""
         self.rules = list(rules or [])
+        self.names = dict(names or {})
+        self._names = {k.casefold(): v for k, v in self.names.items()}
         self._compiled = [([_compile(s) for s in _segments(r["site"])], _segments(r["local"]))
                           for r in self.rules]
 
@@ -62,6 +69,20 @@ class FolderMap:
             out.append({"site": site, "local": local})
         return out
 
+    @staticmethod
+    def clean_name(name) -> str:
+        """A name typed in the "Saved as" column -> tidy name; "" = use the site's name."""
+        name = str(name or "").strip()
+        if not name:
+            return ""
+        if "/" in name or "\\" in name:
+            raise ValueError("a folder name can't contain / or \\ - use Folder map to move a folder elsewhere")
+        if name in (".", ".."):
+            raise ValueError("a folder name can't be . or ..")
+        if "*" in name:
+            raise ValueError("a folder name can't contain *")
+        return name
+
     def _match(self, parts: list):
         """(rule index, its target, the folder segments it matched) for the first matching rule."""
         for i, (pat, target) in enumerate(self._compiled):
@@ -72,10 +93,16 @@ class FolderMap:
     def map_parts(self, parts: list) -> list:
         """Folder segments as on the site -> folder segments on disk (not yet made safe)."""
         hit = self._match(parts)
-        if hit is None:
-            return list(parts)
-        _i, target, n = hit
-        return list(target) + list(parts[n:])
+        out, start = [], 0
+        if hit is not None:
+            _i, target, start = hit
+            out = list(target)
+            own = self._names.get("/".join(parts[:start]).casefold())
+            if own and out:
+                out[-1] = own                   # a name typed for that exact folder wins
+        for i in range(start, len(parts)):
+            out.append(self._names.get("/".join(parts[:i + 1]).casefold()) or parts[i])
+        return out
 
     def disk_folder(self, site_path: str) -> str:
         """Catalog folder ("Acorn/Archimedes (20231029-220453)") -> its folder in the download

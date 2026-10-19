@@ -34,6 +34,7 @@ DEFAULT_SETTINGS = {
     "full_scan_every_days": 7,      # 0 = off (only when sync schedule is on, or on its own)
     "data_dir": "",                 # set at start-up from --data unless changed in the UI
     "folder_map": [],               # [{site, local}]: save site folders elsewhere (folder_map.py)
+    "folder_names": {},             # {site folder: name on disk} from the tree's "Saved as" column
 }
 
 

@@ -5,6 +5,19 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-19
+
+### New
+- **"Saved as" column in the folder tree**: each folder's name in your download folder, right next
+  to its name on the site. Type a new name and press Enter (or click away) to save the folder, and
+  everything in it, under that name; leave it empty to use the site's name again. On a dated folder,
+  **−date** saves it without the date in one click. Renamed folders show their name in colour, and
+  the name follows the folder when lolroms moves it to a newer set date.
+
+### Changed
+- The arrow button on folder rows is gone (the column replaces it). ☰ → Folder map stays for rules
+  with `*` and for saving folders somewhere else.
+
 ## [1.4.0] - 2026-10-19
 
 The Folder map release: your own folder names on disk, and no more re-ticking or re-mapping when

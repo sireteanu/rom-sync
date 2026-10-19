@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .catalog import OWN
 from .engine import Engine, parse_types
+from .folder_map import FolderMap
 
 log = logging.getLogger("dircrawl")
 
@@ -34,8 +35,21 @@ def node_json(engine: Engine, tree: dict, rules: dict, path: str) -> dict:
             "own_bytes": n.own_bytes, "own_newest": n.own_newest, "own_synced": n.own_synced,
             "own_synced_bytes": n.own_synced_bytes, "own_failed": n.own_failed,
             "own_state": "on" if engine.catalog.effective_files(path, rules) else "off",
-            # set when a Folder map rule saves this folder somewhere else
-            "saved_to": engine.fmap.disk_folder(path) if engine.fmap.rule_at(path) else None}
+            **_saved_as(engine, path)}
+
+
+def _saved_as(engine: Engine, path: str) -> dict:
+    """The tree's "Saved as" column: this folder's name on disk, and its whole path when a Folder
+    map rule puts it somewhere else."""
+    if not path:
+        return {"disk_name": "", "name_set": False, "saved_to": None}
+    disk = engine.fmap.disk_folder(path)
+    plain = FolderMap().disk_folder(path)
+    named = path.casefold() in {k.casefold() for k in engine.fmap.names}
+    return {"disk_name": disk.rsplit("/", 1)[-1], "name_set": named,
+            # the full place on disk when it isn't just the site's place with this folder renamed
+            "saved_to": disk if disk.rsplit("/", 1)[0] != plain.rsplit("/", 1)[0] or
+            (disk != plain and not named) else None}
 
 
 def create_app(engine_factory, password: Optional[str] = None, on_restart=None, on_shutdown=None) -> FastAPI:
@@ -170,6 +184,16 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
         try:
             return {"settings": eng().update_settings(values), "data_locked": eng().data_locked}
         except (ValueError, Exception) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @app.post("/api/folder-name")
+    async def set_folder_name(body: dict = Body(...)):
+        try:
+            return eng().set_folder_name(body.get("path"), body.get("name"))
+        except RuntimeError:
+            return JSONResponse({"error": "Wait until the scan or sync has finished, then try again."},
+                                status_code=409)
+        except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
     @app.get("/api/folder-map")

@@ -112,17 +112,8 @@ function fillRow(el, n, depth, showPath) {
     p.textContent = n.path.slice(0, n.path.lastIndexOf("/"));
     name.append(p);
   }
-  if (n.saved_to) {
-    const d = document.createElement("span");
-    d.className = "dest";
-    d.textContent = "\u2192 " + n.saved_to;
-    name.append(d);
-  }
-  name.title = (n.error ? `${n.path}\nCould not be read: ${n.error}` : n.path)
-    + (n.saved_to ? `\nSaved in: ${n.saved_to} (Folder map)` : "");
-  const mapBtn = $(".map", row);
-  mapBtn.classList.toggle("on", !!n.saved_to);
-  mapBtn.title = n.saved_to ? `Saved in ${n.saved_to} - change it (Folder map)` : "Save this folder under another name (Folder map)";
+  name.title = n.error ? `${n.path}\nCould not be read: ${n.error}` : n.path;
+  fillSavedAs(row, n);
   $(".files", row).textContent = n.files ? num(n.files) : "";
   $(".size", row).textContent = n.files ? bytes(n.bytes) : "";
   $(".date", row).textContent = n.newest || "";
@@ -158,8 +149,57 @@ function makeNode(n, depth, showPath = false) {
   $(".tick", row).addEventListener("change", (e) =>
     select(el.dataset.path, e.target.dataset.state === "partial" ? true : e.target.checked));
   $(".info", row).addEventListener("click", () => showFiles(el.dataset.path));
-  $(".map", row).addEventListener("click", () => openFolderMap(el.dataset.path));
+  wireSavedAs(el);
   return el;
+}
+
+/* "Saved as" column: the folder's name in the download folder. Type a name + Enter (or leave the
+   field) to save it under that name; empty = the site's name again. "-date" drops the set date. */
+const SET_DATE = /\s*\(\d{8}-\d{6}\)$/;     // "Archimedes (20231029-220453)": the set's date
+function fillSavedAs(row, n) {
+  const input = $(".as", row);
+  if (!input || document.activeElement === input) return;     // don't overwrite while typing
+  input.value = n.disk_name || "";
+  input.dataset.orig = input.value;
+  input.classList.toggle("renamed", !!n.name_set);
+  input.classList.toggle("moved", !!n.saved_to);
+  input.placeholder = n.name || "";
+  input.title = (n.saved_to ? `Saved in ${n.saved_to} (Folder map)` : `Saved in the download folder as "${input.value}"`)
+    + "\nType a new name and press Enter. Leave it empty to use the site's name.";
+  input.setAttribute("aria-label", `Name in the download folder for ${n.path}`);
+  $(".nodate", row).hidden = !SET_DATE.test(input.value);
+}
+async function saveName(el, input, value) {
+  value = value.trim();
+  if (value === input.dataset.orig || input.classList.contains("saving")) return;
+  input.classList.add("saving");
+  try {
+    await api("/api/folder-name", { method: "POST", body: { path: el.dataset.path, name: value } });
+    input.dataset.orig = value;
+    input.blur();
+    await refreshVisible();
+    poll(true);
+  } catch (e) {
+    alert("Not saved: " + e.message);
+    input.value = input.dataset.orig;
+  } finally {
+    input.classList.remove("saving");
+  }
+}
+function wireSavedAs(el) {
+  const row = el.firstElementChild, input = $(".as", row);
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); saveName(el, input, input.value); }
+    else if (e.key === "Escape") { input.value = input.dataset.orig; input.blur(); }
+  });
+  input.addEventListener("blur", () => {
+    if (!input.classList.contains("saving") && input.value.trim() !== input.dataset.orig) saveName(el, input, input.value);
+  });
+  $(".nodate", row).addEventListener("click", (e) => {
+    e.stopPropagation();
+    saveName(el, input, input.dataset.orig.replace(SET_DATE, ""));
+  });
 }
 
 /* a folder with files of its own *and* subfolders gets a first row for just its own files, so they
@@ -650,7 +690,6 @@ function fmapRow(site = "", local = "") {
   $("#fmap-rows").append(r);
   return r;
 }
-const SET_DATE = /\s*\(\d{8}-\d{6}\)$/;     // "Archimedes (20231029-220453)": the set's date
 // does a Folder map rule's site folder (with *) name exactly this folder?
 function ruleNames(site, path) {
   const a = site.split("/").filter(Boolean), b = path.split("/");

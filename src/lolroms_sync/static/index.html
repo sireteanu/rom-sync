@@ -37,7 +37,7 @@
         </button>
         <button id="btn-fmap" role="menuitem">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3zM13 13h5m-2-2 2 2-2 2"/></svg>
-          <span><b>Folder map</b><small>Save site folders under other folder names</small></span>
+          <span><b>Folder map</b><small>Rules with * for many folders, or saving folders elsewhere</small></span>
         </button>
         <button id="btn-theme" role="menuitem" class="theme-toggle">
           <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
@@ -80,7 +80,7 @@
       <button id="btn-clear-sel" class="btn small ghost" title="Untick everything">Clear selection</button>
     </div>
     <div class="cols">
-      <button class="sort c-name" data-sort="name" title="Sort by name">Folder</button><button class="sort c-num c-files" data-sort="files" title="Sort by number of files">Files</button><button class="sort c-num c-size" data-sort="bytes" title="Sort by size">Size</button>
+      <button class="sort c-name" data-sort="name" title="Sort by name">Folder</button><span class="c-as" title="The folder's name in your download folder. Type a new name and press Enter.">Saved as</span><button class="sort c-num c-files" data-sort="files" title="Sort by number of files">Files</button><button class="sort c-num c-size" data-sort="bytes" title="Sort by size">Size</button>
       <button class="sort c-date" data-sort="newest" title="Sort by the newest file's date">Updated</button><button class="sort c-meter" data-sort="synced" title="Sort by how much is synced">Synced</button>
     </div>
     <div id="tree" class="tree" role="tree"></div>
@@ -172,7 +172,8 @@
 <dialog id="fmap-dlg" class="dlg wide">
   <form id="fmap-form" method="dialog">
     <div class="dlg-head"><h2>Folder map</h2><button class="btn icon" value="cancel" aria-label="Close">✕</button></div>
-    <p class="hint">Save a site folder, and everything in it, under a folder name of your choice in the
+    <p class="hint">To rename one folder, type its new name in the tree's <b>Saved as</b> column.
+      Rules here are for more: save a site folder, and everything in it, anywhere in the
       download folder. Use <b>*</b> in the site folder for any text, so a rule keeps working when the site
       renames a folder: <code>Acorn/Archimedes (*)</code> → <code>Acorn/Archimedes</code>.
       Several site folders can share one folder. The first rule that matches wins.</p>
@@ -228,13 +229,11 @@
       <button class="twisty" aria-label="Expand"></button>
       <input type="checkbox" class="tick">
       <span class="name"></span>
+      <span class="c-as"><input class="as" spellcheck="false" autocomplete="off"><button class="nodate" type="button" title="Save it without the date" aria-label="Remove the date from the name" hidden>&minus;date</button></span>
       <span class="c-num files"></span>
       <span class="c-num size"></span>
       <span class="c-date date"></span>
       <span class="c-meter"><span class="meter"><span class="fill"></span></span><span class="pct"></span></span>
-      <button class="map" title="Save this folder under another name (Folder map)" aria-label="Map folder">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10a5 5 0 0 1 0 10H9m0 0 3-3m-3 3 3 3"/></svg>
-      </button>
       <button class="info" title="Show files in this folder" aria-label="Show files">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
       </button>

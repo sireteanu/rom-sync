@@ -168,3 +168,15 @@ def test_folder_map_rejects_bad_rules(rules, error):
     from lolroms_sync.folder_map import FolderMap
     with pytest.raises(ValueError, match=re.escape(error)):
         FolderMap.clean(rules)
+
+
+def test_folder_names_win_at_their_folder():
+    from lolroms_sync.folder_map import FolderMap
+    fm = FolderMap([{"site": "SEGA (*)", "local": "Consoles/Sega"}],
+                   {"acorn/archimedes (2023)": "Archimedes", "SEGA (1)": "SEGA", "Acorn": "ACORN"})
+    assert fm.disk_folder("Acorn/Archimedes (2023)/Demos") == "ACORN/Archimedes/Demos"
+    assert fm.disk_folder("SEGA (1)/Saturn") == "Consoles/SEGA/Saturn"     # rule places it, name names it
+    assert fm.disk_folder("SEGA (2)/Saturn") == "Consoles/Sega/Saturn"
+    with pytest.raises(ValueError):
+        FolderMap.clean_name("a/b")
+    assert FolderMap.clean_name("  ") == ""

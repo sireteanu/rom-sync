@@ -40,7 +40,8 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 |---|---|
 | Catalog | **Scan site** reads every listing page of lolroms.com (about 330 folders, 117,000+ files) into a local database. File links are never requested while scanning. Sections linked only from the site's header bar (Arcade, Pokéhacks, Audio [FLAC], fixdats) are included. |
 | Folder tree | Every folder with file count, total size, newest file date and how much is synced. Columns sort by clicking their header (ascending → descending → name order). Search box finds folders by name. |
-| Folder map | Save a site folder (and everything in it) under another folder name, set in the page (☰ → Folder map, or the arrow on a folder's row). `*` matches any text, so a rule survives the site renaming a folder to a newer set date. |
+| Saved as | A column in the folder tree with each folder's name on disk: type a new name (or click **−date** on a dated folder) to save that folder and everything in it under that name. |
+| Folder map | Rules for more than renaming (☰ → Folder map): save a site folder anywhere in the download folder; `*` matches any text, so one rule covers many folders and survives the site renaming a folder to a newer set date. |
 | Renamed folders | When the site moves a folder to a newer set date (`Archimedes (2023…)` → `Archimedes (2026…)`), ticks and exact Folder map rules follow it, after a scan or by themselves during a sync. |
 | Selection | Tri-state tick boxes. Ticking a folder includes everything below it, including folders the site adds later. A folder with files of its own *and* subfolders shows a **Files in this folder** row, so its own files can be ticked without its subfolders. Ticks are saved immediately. |
 | Sync | Downloads only what's missing, half-finished (`.part`, resumed) or changed on the site (date or size in the listing differs). Unchanged files cost no network request. |
@@ -161,6 +162,10 @@ downloaded before:
   allows it because no download runs yet) and asks the disk once per file (`os.stat`, passed to
   `sync.plan()`, `stamp_file()` and `_set_mode()`); permissions and dates are only written when they
   differ. The Clean up check (`walk` + `find`) also runs in a worker thread.
+- **Saved as** (`folder_map.py`, setting `folder_names` `{site folder: name}`, `POST /api/folder-name`):
+  the folder keeps its place but gets another name on disk; subfolders follow. A name wins over Folder
+  map rules for that exact folder (a rule places it, the name names it). Names follow folders the site
+  renames to a newer set date, like ticks do.
 - **Folder map** (`folder_map.py`): rules `{site, local}` stored in the `folder_map` setting, edited
   only through `POST /api/folder-map`. `site` is a site folder path where `*` matches any text inside
   one folder name (case-insensitive); `local` is the folder inside the download folder. The first
@@ -280,6 +285,7 @@ Stored in the catalog (`settings` table); changed in the Settings dialog or `POS
 | `outage_wait_hours` | `12` | How long a sync waits for the site when it's down before pausing (0 = don't wait; files then fail after their retries) |
 | `interrupted_job` | `""` | Internal: set while a sync runs |
 | `folder_map` | `[]` | Folder map rules `[{site, local}]`; changed only with `POST /api/folder-map` |
+| `folder_names` | `{}` | "Saved as" names `{site folder: name on disk}`; changed only with `POST /api/folder-name` |
 
 ---
 
@@ -327,13 +333,14 @@ All JSON; the page uses nothing else.
 | Method & path | Purpose |
 |---|---|
 | `GET /api/status?log_since=N` | Version, busy, job, catalog totals, selection totals (cached until the tree or ticks change), scan / sync progress (incl. `bytes_planned`, `bytes_left`, `files_left`, `eta`, `active` downloads), `leftovers` (Clean up summary from the last check, or null), next run, new log lines |
-| `GET /api/tree?path=P` | Folder node and its children (counts, sizes, newest, synced, `state`, `own_*`, `own_state`, `saved_to` when a Folder map rule saves it elsewhere) |
+| `GET /api/tree?path=P` | Folder node and its children (counts, sizes, newest, synced, `state`, `own_*`, `own_state`, `disk_name` ("Saved as"), `name_set`, `saved_to` when a Folder map rule saves it elsewhere) |
 | `GET /api/search?q=` | Folders matching a name |
 | `GET /api/files?path=P` | Files directly in a folder with status |
 | `POST /api/select` `{path, include}` | Tick/untick a folder; `path` `"<folder>/."` = its own files only |
 | `POST /api/selection/clear` | Untick everything |
 | `POST /api/scan` `{root}` · `POST /api/sync` · `POST /api/stop` | Jobs (409 when busy) |
 | `GET/POST /api/settings` | Read / change settings (400 with a message on invalid values) |
+| `POST /api/folder-name` `{path, name}` | "Saved as": save this folder under `name` (`""` = the site's name) -> `{path, name, moved}`; 400 on a bad name, 409 while busy |
 | `GET /api/folder-map` | Folder map rules `{rules: [{site, local}]}` |
 | `POST /api/folder-map` `{rules}` | Replace the rules -> `{rules, moved}` (files whose place changed); 400 with a message on a bad rule, 409 while busy |
 | `GET /api/history` | Last jobs |

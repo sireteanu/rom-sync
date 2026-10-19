@@ -65,8 +65,10 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   `confirm: true`, refuses while busy, and re-checks so only current leftovers are removed; then
   empty folders go, `Manifest.forget()` and `Catalog.forget_local()`. Never delete anything else
   from the download folder.
-- **Folder map** (`folder_map.py`, setting `folder_map`, `/api/folder-map`, ☰ → Folder map and the
-  arrow button on tree rows): rules are edited in the page only (no text file). Saving them, and every
+- **Saved as** column (tree, `folder_names` setting, `/api/folder-name`) is the main way to rename
+  folders on disk - the owner renames almost every folder, so keep it fast (Enter / blur saves,
+  "−date" button). **Folder map** (`folder_map.py`, setting `folder_map`, `/api/folder-map`,
+  ☰ → Folder map) holds `*` rules and moves. Both are edited in the page only (no text file). Saving them, and every
   start, runs `Catalog.remap(engine.rel_of)` so catalog paths always match the rules.
 - **Renamed folders**: lolroms renames dated folders when a newer set arrives. `Catalog.follow_renames()`
   (after every finished scan) moves ticks from a vanished folder to its same-stem sibling

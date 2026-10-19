@@ -497,3 +497,29 @@ def test_follow_renames_only_moves_ticks_to_a_folder_with_the_same_name(tmp_path
     assert renames == {"Acorn/Archimedes (20231029-220453)": "Acorn/Archimedes (20261001-120000)"}
     assert cat.rules() == {"Acorn/Archimedes (20261001-120000)": True, "Acorn/Archimedes (20261001-120000)/.": True,
                            "Acorn/Risc PC (20231029-220453)": True, "Acorn/Gone": True}
+
+
+def test_saved_as_names_a_folder_on_disk(site_factory, app_factory):
+    """The tree's "Saved as" column: a folder gets another name on disk, the tree shows it, the
+    name follows the folder when the site moves it to a newer set date, empty = the site's name."""
+    from conftest import kids, on_disk, scan, select, sync
+    site = site_factory("dated")
+    c = app_factory(site)
+    scan(c)
+    select(c, f"Acorn/{OLD_SET}")
+    node = kids(c, "Acorn")[OLD_SET]
+    assert (node["disk_name"], node["name_set"], node["saved_to"]) == (OLD_SET, False, None)
+    r = c.post("/api/folder-name", json={"path": f"Acorn/{OLD_SET}", "name": " Archimedes "})
+    assert r.status_code == 200, r.text
+    node = kids(c, "Acorn")[OLD_SET]
+    assert (node["disk_name"], node["name_set"], node["saved_to"]) == ("Archimedes", True, None)
+    sync(c)
+    assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z"}
+    rename_on_site(site)
+    n = len(site.file_requests())
+    sync(c)                                                    # the name went along: nothing to fetch
+    assert len(site.file_requests()) == n
+    assert kids(c, "Acorn")[NEW_SET]["disk_name"] == "Archimedes"
+    assert c.post("/api/folder-name", json={"path": f"Acorn/{NEW_SET}", "name": ""}).status_code == 200
+    assert kids(c, "Acorn")[NEW_SET]["disk_name"] == NEW_SET
+    assert c.post("/api/folder-name", json={"path": "Acorn", "name": "a/b"}).status_code == 400

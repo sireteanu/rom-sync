@@ -82,26 +82,23 @@ Click **Sync selected**. Rom Sync:
 Run it again any time - it only ever fetches what's missing or changed. If you copied files into
 the download folder yourself, Rom Sync recognises them (by size) and doesn't download them again.
 
-**Saving a folder under another name (Folder map).** Many folders on lolroms carry the date of their
-set, like *Archimedes (20231029-220453)*, and the site renames them when a newer set arrives. To keep
-your own folder names, click the arrow button at the end of the folder's row (or ☰ → **Folder map**)
-and say where it goes, for example:
+**Saving folders under your own names (Saved as).** Next to each folder's name the tree has a
+**Saved as** column: the name that folder gets in your download folder. To change it, click it, type
+the new name and press **Enter**. The folder and everything in it are saved under that name; leave the
+field empty to use the site's name again. Renamed folders show their name in colour.
 
-| Folder on the site | Save in this folder |
-|---|---|
-| `Acorn/Archimedes (*)` | `Acorn/Archimedes` |
-| `Acorn/Risc PC (*)` | `Acorn/Risc PC` |
+Many folders on lolroms carry the date of their set, like *Archimedes (20231029-220453)*. Hover over
+the row and click **−date** to save it as just *Archimedes*. When the site later moves the folder to a
+newer date, your ticks and the name you gave it go along with it, and only new or changed files are
+downloaded.
 
-`*` stands for any text, so the rule still works after the site changes the date. The arrow fills
-this in for you on a dated folder.
+For more than renaming one folder, open ☰ → **Folder map**: there you can save a site folder anywhere
+in the download folder, or cover many folders with one rule using `*` for any text
+(`Acorn/Risc PC (*)` → `Acorn/Risc PC`).
 
-You don't need to re-tick anything when the site moves a folder to a newer date: your ticks follow
-the renamed folder, after a scan or by themselves during the next sync. With a Folder map rule the
-files keep their place on disk, so only new or changed files are downloaded. Subfolders follow
-their folder, file names stay as on the site, and the first rule that matches wins. The tree shows
-"→ Acorn/Archimedes" next to a mapped folder. Files you already downloaded aren't moved: move them
-into the new folder yourself before the next sync (Rom Sync recognises them by size), or let the sync
-download them again and remove the old copies with Clean up.
+Files you already downloaded aren't moved when you rename a folder: move them into the new folder
+yourself before the next sync (Rom Sync recognises them by size), or let the sync download them again
+and remove the old copies with Clean up. Names can't be changed while a scan or sync runs.
 
 Every downloaded file gets the **date shown on the website**, so you can sort by date in your file
 manager to see what's new; folders get the date of their newest file. Files get permissions **777**

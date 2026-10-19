@@ -90,7 +90,8 @@ class Engine:
         log.addHandler(self.logbuf)
         log.setLevel(logging.DEBUG)
         self._keep_romm_settings()            # after the log is set up, so it shows in the page
-        self.fmap = FolderMap(FolderMap.clean(self.catalog.settings().get("folder_map") or []))
+        s0 = self.catalog.settings()
+        self.fmap = FolderMap(FolderMap.clean(s0.get("folder_map") or []), self._clean_names(s0.get("folder_names")))
         self._remap(at_start=True)
         self._log_startup()
         self.job: Optional[dict] = None
@@ -123,13 +124,47 @@ class Engine:
                      "" if at_start else " - the next sync puts them there")
         return n
 
+    @staticmethod
+    def _clean_names(names) -> dict:
+        out = {}
+        for k, v in (names or {}).items() if isinstance(names, dict) else ():
+            try:
+                v = FolderMap.clean_name(v)
+            except ValueError:
+                continue
+            if k and v:
+                out[k] = v
+        return out
+
+    def set_folder_name(self, path: str, name) -> dict:
+        """The tree's "Saved as" column: save this site folder under another name ("" = the site's
+        name). ValueError says what to fix."""
+        if self.busy:
+            raise RuntimeError("busy")
+        path = (path or "").strip("/")
+        if not path:
+            raise ValueError("pick a folder")
+        name = FolderMap.clean_name(name)
+        names = {k: v for k, v in self.fmap.names.items() if k.casefold() != path.casefold()}
+        site_name = path.rsplit("/", 1)[-1]
+        if name and name != site_name:
+            names[path] = name
+        self.catalog.save_settings({"folder_names": names})
+        self.fmap = FolderMap(self.fmap.rules, names)
+        if name and name != site_name:
+            log.info("%s is saved as %s", path, name)
+        else:
+            log.info("%s is saved under its own name again", path)
+        moved = self._remap()
+        return {"path": path, "name": names.get(path, ""), "moved": moved}
+
     def set_folder_map(self, rules) -> dict:
         """Rules from the page's Folder map dialog. ValueError says what to fix."""
         if self.busy:
             raise RuntimeError("busy")
         clean = FolderMap.clean(rules)
         self.catalog.save_settings({"folder_map": clean})
-        self.fmap = FolderMap(clean)
+        self.fmap = FolderMap(clean, self.fmap.names)
         log.info("Folder map saved: %d %s", len(clean), "rule" if len(clean) == 1 else "rules")
         moved = self._remap()
         return {"rules": clean, "moved": moved}
@@ -213,7 +248,7 @@ class Engine:
             if k == "outage_wait_hours":
                 v = max(0.0, float(v or 0))
                 v = int(v) if v == int(v) else v
-            if k in ("interrupted_job", "folder_map"):      # folder_map: set_folder_map() only
+            if k in ("interrupted_job", "folder_map", "folder_names"):   # their own endpoints only
                 continue
             if k in ("refresh_before_sync", "check_remote", "resume_interrupted"):
                 v = bool(v)
@@ -346,7 +381,17 @@ class Engine:
         return out
 
     def _follow_map_renames(self, renamed: dict) -> None:
-        """Folder map rules naming a renamed folder exactly (no *) follow it too."""
+        """Folder map rules naming a renamed folder exactly (no *), and names typed in the "Saved
+        as" column, follow it too."""
+        names, names_changed = {}, False
+        for k, v in self.fmap.names.items():
+            new = renamed_path(k, renamed)
+            names_changed |= new != k
+            names[new] = v
+        if names_changed:
+            self.catalog.save_settings({"folder_names": names})
+            self.fmap = FolderMap(self.fmap.rules, names)
+            log.info("Folder names: renamed folders keep the names you gave them")
         rules, changed = [], False
         for rule in self.fmap.rules:
             site = rule["site"]
@@ -364,8 +409,9 @@ class Engine:
                 log.warning("Folder map not updated after a rename: %s", e)
                 return
             self.catalog.save_settings({"folder_map": clean})
-            self.fmap = FolderMap(clean)
+            self.fmap = FolderMap(clean, self.fmap.names)
             log.info("Folder map: rules for renamed folders now name the new folders")
+        if changed or names_changed:
             self._remap()
 
     async def _sync(self, client, robots) -> dict:
