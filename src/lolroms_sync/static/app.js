@@ -159,6 +159,33 @@ function makeNode(n, depth, showPath = false) {
 // the set's date at the end of a folder name: "Archimedes (20231029-220453)" or
 // "PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)"
 const SET_DATE = /\s*\((\d{8}-\d{6}|\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})\)$/;
+/* RomM platforms ("Folder Name" from RomM's docs): offered while typing in Saved as, and named in a
+   small badge when a folder's path starts with one */
+const rommNames = new Map();          // folder name -> platform name
+(async () => {
+  try {
+    const r = await fetch("/static/romm-platforms.json", { cache: "no-cache" });
+    const { platforms } = await r.json();
+    const list = $("#romm-list");
+    for (const [name, slug] of platforms) {
+      rommNames.set(slug, name);
+      const o = document.createElement("option");
+      o.value = "/" + slug;
+      o.label = name;
+      list.append(o);
+    }
+    for (const el of document.querySelectorAll(".node > .row")) updateRommTag(el);
+  } catch (e) { /* suggestions are a convenience; the column works without them */ }
+})();
+function updateRommTag(row) {
+  const input = $(".as", row), tag = $(".romm-tag", row);
+  if (!input || !tag) return;
+  const first = input.value.replace(/^\/+/, "").split("/")[0];
+  const name = rommNames.get(first);
+  tag.hidden = !name;
+  if (name) { tag.textContent = name; tag.title = `RomM platform: ${name} (folder ${first})`; }
+}
+
 function fillSavedAs(row, n) {
   const input = $(".as", row);
   if (!input) return;
@@ -176,10 +203,12 @@ function fillSavedAs(row, n) {
   input.classList.toggle("moved", !!n.moved);
   input.placeholder = "/" + (n.disk_path || "");
   input.title = `Saved in the download folder as ${input.value}`
-    + "\nType another path and press Enter, e.g. /Apple II."
+    + "\nType another path and press Enter, e.g. /Apple II - or clear it and type a RomM platform"
+    + " (e.g. Sega 32X) to pick its folder, then add /Subfolder if you like."
     + "\nLeave it empty to put it back where it goes by default.";
   input.setAttribute("aria-label", `Where ${n.path} is saved`);
   $(".nodate", row).hidden = !SET_DATE.test(input.value);
+  updateRommTag(row);
 }
 function asFullPath(value) {
   value = value.trim().replace(/\\/g, "/").replace(/\/+$/, "");
@@ -205,6 +234,7 @@ async function saveName(el, input, value) {
 function wireSavedAs(el) {
   const row = el.firstElementChild, input = $(".as", row);
   input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("input", () => updateRommTag(row));
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); saveName(el, input, input.value); }
     else if (e.key === "Escape") { input.value = input.dataset.orig; input.blur(); }

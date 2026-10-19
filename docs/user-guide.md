@@ -98,6 +98,12 @@ Everything inside the folder goes along with it. A folder you keep inside its pa
 `/Apple/2`) moves along if you later move *Apple*. Changed folders show in colour, moved ones in
 italics.
 
+**Using RomM's platform folders.** RomM finds games by platform folder names such as `sega32`,
+`snes` or `acorn-archimedes`. You don't need to know them: clear a folder's Saved as field and start
+typing the platform, for example *32x* or *super nintendo*, and pick it from the list. The field gets
+RomM's folder name (`/sega32`); press Enter to save. To keep a folder *inside* a platform, add to it:
+`/sega32/Extras`. A small badge next to the field shows which RomM platform a folder is saved under.
+
 **Where its subfolders go.** Folders with subfolders have a small arrow next to the field. Click it to
 put every subfolder somewhere else, each under its own name (also subfolders the site adds later):
 `/` puts them straight in the download folder, so *SEGA/32X/Sub A* becomes just *Sub A*;

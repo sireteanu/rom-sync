@@ -40,7 +40,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 |---|---|
 | Catalog | **Scan site** reads every listing page of lolroms.com (about 330 folders, 117,000+ files) into a local database. File links are never requested while scanning. Sections linked only from the site's header bar (Arcade, Pokéhacks, Audio [FLAC], fixdats) are included. |
 | Folder tree | Every folder with file count, total size, newest file date and how much is synced. Columns sort by clicking their header (ascending → descending → name order). Search box finds folders by name. |
-| Saved as | A column in the folder tree with every folder's full path in the download folder (`/Apple/II`). Type another path (`/Apple II`) to put it there, or click **−date** on a dated folder. The arrow next to it sets where a folder's subfolders go (`/` = the base of the download folder). Everything below a folder follows it. |
+| Saved as | A column in the folder tree with every folder's full path in the download folder (`/Apple/II`). Type another path (`/Apple II`) to put it there, or click **−date** on a dated folder. The arrow next to it sets where a folder's subfolders go (`/` = the base of the download folder). Everything below a folder follows it. While typing, RomM's platforms are suggested (`Sega 32X` -> `/sega32`), and a badge names the RomM platform a folder is saved under. |
 | Renamed folders | When the site moves a folder to a newer set date (`Archimedes (2023…)` → `Archimedes (2026…)`), ticks and Saved as settings follow it, after a scan or by themselves during a sync. |
 | Selection | Tri-state tick boxes. Ticking a folder includes everything below it, including folders the site adds later. A folder with files of its own *and* subfolders shows a **Files in this folder** row, so its own files can be ticked without its subfolders. Ticks are saved immediately. |
 | Sync | Downloads only what's missing, half-finished (`.part`, resumed) or changed on the site (date or size in the listing differs). Unchanged files cost no network request. |
@@ -170,7 +170,9 @@ downloaded before:
   The column shows `/` + `disk_path` and sends full paths; `FolderMap.as_typed()` stores them
   relative to where the folder sits anyway (`base_of`): the default path clears the setting, a path
   below the base becomes a rename/relative path (it follows a moved parent), anything else stays
-  `/path`.
+  `/path`. The field's `<datalist>` comes from `static/romm-platforms.json` (RomM's Supported
+  Platforms table: platform name -> RomM folder name, CC0); refresh it with
+  `scripts/update_romm_platforms.py` after cloning `rommapp/docs`.
   `UrlRules.rel_path(url, folder_map)` applies it when a listing is read; saving a setting (and every
   start) recomputes all catalog paths (`Catalog.remap()`); files whose place changed are planned afresh
   by the next sync (a copy already at the new place is adopted by size). Clean up maps catalog folders
@@ -386,6 +388,7 @@ unraid/         docker-compose.yml (Compose Manager), lolroms-sync.xml (Docker-t
                 release.yml (GitHub release per version), docker.yml (registry image, manual)
 Dockerfile      installs the dependencies in their own layer (rebuilt only when they change)
 start.bat, run.py, publish.bat   launchers / helpers
+scripts/update_romm_platforms.py  refreshes static/romm-platforms.json from RomM's docs
 ```
 
 ---

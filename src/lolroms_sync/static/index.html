@@ -216,13 +216,16 @@
 <div id="restarting" class="restarting" hidden><div><b>Restarting Rom Sync…</b><p class="muted">This page reloads when it's back.</p></div></div>
 <div id="shutdown" class="restarting" hidden><div><b>Rom Sync is shut down</b><p id="shutdown-how" class="muted"></p></div></div>
 
+<!-- RomM platforms (romm-platforms.json): suggestions for the Saved as field -->
+<datalist id="romm-list"></datalist>
+
 <template id="row-tpl">
   <div class="node" role="treeitem">
     <div class="row">
       <button class="twisty" aria-label="Expand"></button>
       <input type="checkbox" class="tick">
       <span class="name"></span>
-      <span class="c-as"><input class="as" spellcheck="false" autocomplete="off"><button class="nodate" type="button" title="Save it without the date" aria-label="Remove the date from the name" hidden>&minus;date</button><button class="subs-btn" type="button" aria-label="Where its subfolders go" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v12h12m0 0-3-3m3 3-3 3"/></svg></button></span>
+      <span class="c-as"><input class="as" list="romm-list" spellcheck="false" autocomplete="off"><span class="romm-tag" hidden></span><button class="nodate" type="button" title="Save it without the date" aria-label="Remove the date from the name" hidden>&minus;date</button><button class="subs-btn" type="button" aria-label="Where its subfolders go" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v12h12m0 0-3-3m3 3-3 3"/></svg></button></span>
       <span class="c-num files"></span>
       <span class="c-num size"></span>
       <span class="c-date date"></span>

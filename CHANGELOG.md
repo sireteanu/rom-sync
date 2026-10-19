@@ -5,6 +5,14 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-10-19
+
+### New
+- **RomM platforms in Saved as**: clear a folder's Saved as field and start typing a platform
+  (e.g. "32x" or "super nintendo") to pick it from RomM's list of 462 supported platforms; the
+  field gets its RomM folder name (`/sega32`). Add `/Subfolder` after it to keep a folder inside
+  a platform. A small badge names the RomM platform for every folder saved under one.
+
 ## [1.4.4] - 2026-10-19
 
 ### Changed

@@ -275,7 +275,8 @@ def test_romm_mapper_is_gone_but_its_choices_are_kept_for_copying(site, app_fact
     import json
     assert json.loads((cfg / "romm-mapper.json").read_text())["map"] == {"Atari/2600": "exclude"}
     assert c.get("/api/romm").status_code in (404, 405)
-    assert "RomM" not in c.get("/").text
+    page = c.get("/").text
+    assert "RomM Mapper" not in page and "btn-romm" not in page     # the mapper's UI is gone
 
 
 def test_replies_are_compressed_and_a_hidden_page_stops_asking(site, app_factory):
@@ -306,3 +307,14 @@ def test_page_asks_for_its_script_by_version(site, app_factory):
     html = c.get("/").text
     assert f'/static/app.js?v={__version__}"' in html and f'/static/app.css?v={__version__}"' in html
     assert c.get(f"/static/app.js?v={__version__}").status_code == 200
+
+
+def test_romm_platform_list_is_served(site, app_factory):
+    """The Saved as column suggests RomM's platform folders (romm-platforms.json, from RomM's docs)."""
+    c = app_factory(site)
+    data = c.get("/static/romm-platforms.json").json()
+    names = {slug: name for name, slug in data["platforms"]}
+    assert len(names) > 400
+    assert names["sega32"] == "Sega 32X" and names["snes"] == "Super Nintendo Entertainment System"
+    assert all(slug and "/" not in slug for slug in names)
+    assert 'list="romm-list"' in c.get("/").text

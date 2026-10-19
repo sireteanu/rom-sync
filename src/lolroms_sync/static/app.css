@@ -157,6 +157,9 @@ h2 { font-size: 15px; font-weight: 600; }
 .as.renamed { color: var(--teal); font-weight: 600; }
 .as.moved { font-style: italic; }
 .as.saving { opacity: .5; }
+.romm-tag { flex: none; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: var(--teal); border: 1px solid var(--teal); border-radius: 9px; padding: 0 6px; opacity: .85; }
+.romm-tag[hidden] { display: none; }
 .nodate { flex: none; border: 1px solid var(--line); background: none; color: var(--ink-2); cursor: pointer;
   font-size: 11px; padding: 1px 5px; border-radius: var(--radius-s); opacity: 0; }
 .row:hover .nodate, .nodate:focus-visible { opacity: 1; }

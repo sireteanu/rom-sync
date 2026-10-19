@@ -99,7 +99,9 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   and re-launches itself with `.venv` when the current Python lacks the dependencies.
 - **RomM**: the RomM Mapper moved to sireteanu/rom-mapper (1.3.5). `Engine._keep_romm_settings()`
   writes the catalog's old `romm` setting to `<config>/romm-mapper.json` once (if missing) so users
-  can copy it; nothing else reads it. Don't add RomM features here.
+  can copy it; nothing else reads it. Don't bring back RomM *mapping* here (platform links, config.yml - that's ROM
+  Mapper's job). Allowed and wanted: RomM platform folder names as suggestions in Saved as
+  (`static/romm-platforms.json`, refreshed with `scripts/update_romm_platforms.py`).
 - The display name is **Rom Sync**; package, module, image and folder names stay `lolroms-sync`.
 - Interface copy: plain sentence-case verbs ("Scan site", "Sync selected"); errors say what to do.
   Dark is the default theme; light via the header toggle (localStorage).
