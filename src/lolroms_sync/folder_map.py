@@ -69,6 +69,34 @@ class FolderMap:
             out = self._apply(base, place) if place else base + [seg]
         return out
 
+    def base_of(self, site_path: str) -> str:
+        """The folder on disk this site folder sits in when it has no place of its own (its
+        parent's place, or where its parent sends subfolders), names made safe."""
+        parts = site_path.split("/") if site_path else []
+        if not parts:
+            return ""
+        out = self.map_parts(parts[:-1])
+        kids = self._kids.get("/".join(parts[:-1]).casefold())
+        if kids is not None:
+            out = self._apply(out, kids)
+        return "/".join(safe_segment(s) for s in out)
+
+    def as_typed(self, site_path: str, full: str) -> str:
+        """A full path typed in the Saved as column ("/Apple II") -> the place to store: "" when it
+        is where the folder goes anyway, a name or path below its base (so it moves along when its
+        parent does), else the /path as typed."""
+        segs = [safe_segment(s) for s in _segments(full)]
+        typed = "/".join(segs)
+        base = self.base_of(site_path)
+        default = (base + "/" if base else "") + safe_segment(site_path.rsplit("/", 1)[-1])
+        if typed == default:
+            return ""
+        if not base:
+            return typed
+        if typed.startswith(base + "/"):
+            return typed[len(base) + 1:]
+        return "/" + typed
+
     def disk_folder(self, site_path: str) -> str:
         """Catalog folder ("Acorn/Archimedes (20231029-220453)") -> its folder in the download
         folder, with names made safe like file paths are ("Acorn/Archimedes")."""

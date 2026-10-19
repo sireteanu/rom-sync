@@ -83,17 +83,20 @@ Run it again any time - it only ever fetches what's missing or changed. If you c
 the download folder yourself, Rom Sync recognises them (by size) and doesn't download them again.
 
 **Choosing where folders go (Saved as).** Next to each folder's name the tree has a **Saved as**
-column: where that folder goes in your download folder. Click it, type, and press **Enter**:
+column with the folder's full path in your download folder: *Apple* shows `/Apple`, its subfolder
+*II* shows `/Apple/II`. To put a folder somewhere else, click the path, type the one you want and press
+**Enter**:
 
-| You type | The folder goes to |
+| You type for *Apple/II* | It goes to |
 |---|---|
-| `Archimedes` | the same place, under the new name |
-| `Extras/Archimedes` | a folder *Extras* in the same place |
-| `/Computers/Archimedes` | *Computers/Archimedes*, counted from the download folder |
-| *(empty)* | back to the site's name and place |
+| `/Apple/2` | renamed, still inside *Apple* |
+| `/Apple II` | its own folder at the top of the download folder |
+| `/Computers/Apple/II` | that folder, created if needed |
+| *(empty)* | back to `/Apple/II` |
 
-Everything inside the folder goes along with it. Renamed folders show in colour, moved ones in italics;
-hover over the field to see exactly where the folder ends up.
+Everything inside the folder goes along with it. A folder you keep inside its parent's folder (like
+`/Apple/2`) moves along if you later move *Apple*. Changed folders show in colour, moved ones in
+italics.
 
 **Where its subfolders go.** Folders with subfolders have a small arrow next to the field. Click it to
 put every subfolder somewhere else, each under its own name (also subfolders the site adds later):

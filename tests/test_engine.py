@@ -512,7 +512,7 @@ def test_a_sync_finds_a_renamed_ticked_folder_by_itself(site_factory, app_factor
     assert len(site.file_requests()) == n + 1                  # only the new game
     assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z", "Acorn/Archimedes/Lander.7z"}
     assert kids(c, "Acorn")[NEW_SET]["state"] == "on"
-    assert kids(c, "Acorn")[NEW_SET]["place"] == "/Acorn/Archimedes"
+    assert kids(c, "Acorn")[NEW_SET]["place"] == "Archimedes"       # /Acorn/Archimedes = a rename
 
 
 def test_follow_renames_only_moves_ticks_to_a_folder_with_the_same_name(tmp_path):
@@ -562,3 +562,27 @@ def test_follow_renames_knows_both_set_date_forms(tmp_path):
     cat.add_dirs({"NEC", "NEC/PC Engine CD (2026-10-14 05-51-53)", "NEC/PC Engine CD (20251001-000000)"}, 1)
     cat.db.execute("INSERT INTO selection VALUES ('NEC/PC Engine CD (20240101-000000)', 1)")
     assert cat.follow_renames() == {"NEC/PC Engine CD (20240101-000000)": "NEC/PC Engine CD (2026-10-14 05-51-53)"}
+
+
+def test_saved_as_takes_full_paths(site, app_factory):
+    """The column shows and takes full paths. A path still inside the parent's folder is stored as a
+    rename (it moves along with the parent); any other path stays where it was typed; the default
+    path (or empty) clears the setting."""
+    from conftest import kids, scan
+    c = app_factory(site)
+    scan(c)
+
+    def place(path, value):
+        r = c.post("/api/folder-place", json={"path": path, "place": value})
+        assert r.status_code == 200, r.text
+        return r.json()["place"]
+
+    assert place("Atari", "/Consoles/Atari") == "Consoles/Atari"   # top-level: same place either way
+    assert kids(c, "Atari")["5200"]["disk_path"] == "Consoles/Atari/5200"
+    assert place("Atari/2600", "/Consoles/Atari/VCS") == "VCS"           # inside its parent: a rename
+    assert place("Atari/5200", "/Atari 5200") == "/Atari 5200"            # elsewhere: as typed
+    assert place("Atari", "/Atari") == ""                                  # its default path clears it
+    k = kids(c, "Atari")
+    assert (k["2600"]["disk_path"], k["5200"]["disk_path"], k["Lynx"]["disk_path"]) == \
+        ("Atari/VCS", "Atari 5200", "Atari/Lynx")
+    assert place("Atari/Lynx", "/Atari/Lynx") == "" and kids(c, "Atari")["Lynx"]["custom"] is False

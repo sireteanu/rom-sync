@@ -40,7 +40,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 |---|---|
 | Catalog | **Scan site** reads every listing page of lolroms.com (about 330 folders, 117,000+ files) into a local database. File links are never requested while scanning. Sections linked only from the site's header bar (Arcade, Pokéhacks, Audio [FLAC], fixdats) are included. |
 | Folder tree | Every folder with file count, total size, newest file date and how much is synced. Columns sort by clicking their header (ascending → descending → name order). Search box finds folders by name. |
-| Saved as | A column in the folder tree: where each folder goes on disk. Type a name (or click **−date** on a dated folder), a path in the same place (`Extras/X`), or a path from the download folder (`/Sega/X`). The arrow next to it sets where a folder's subfolders go (`/` = the base of the download folder). Everything below a folder follows it. |
+| Saved as | A column in the folder tree with every folder's full path in the download folder (`/Apple/II`). Type another path (`/Apple II`) to put it there, or click **−date** on a dated folder. The arrow next to it sets where a folder's subfolders go (`/` = the base of the download folder). Everything below a folder follows it. |
 | Renamed folders | When the site moves a folder to a newer set date (`Archimedes (2023…)` → `Archimedes (2026…)`), ticks and Saved as settings follow it, after a scan or by themselves during a sync. |
 | Selection | Tri-state tick boxes. Ticking a folder includes everything below it, including folders the site adds later. A folder with files of its own *and* subfolders shows a **Files in this folder** row, so its own files can be ticked without its subfolders. Ticks are saved immediately. |
 | Sync | Downloads only what's missing, half-finished (`.part`, resumed) or changed on the site (date or size in the listing differs). Unchanged files cost no network request. |
@@ -167,6 +167,10 @@ downloaded before:
   where that folder's subfolders go, each under its own name (`/` = the download folder itself);
   the folder's own files stay with it, and a subfolder's own place wins. Places are resolved top-down
   (`FolderMap.map_parts`), so everything below a folder follows it; file names never change.
+  The column shows `/` + `disk_path` and sends full paths; `FolderMap.as_typed()` stores them
+  relative to where the folder sits anyway (`base_of`): the default path clears the setting, a path
+  below the base becomes a rename/relative path (it follows a moved parent), anything else stays
+  `/path`.
   `UrlRules.rel_path(url, folder_map)` applies it when a listing is read; saving a setting (and every
   start) recomputes all catalog paths (`Catalog.remap()`); files whose place changed are planned afresh
   by the next sync (a copy already at the new place is adopted by size). Clean up maps catalog folders

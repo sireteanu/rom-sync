@@ -19,7 +19,7 @@ from .core.constants import ARCHIVE_EXTENSIONS, DOWNLOAD_EXTENSIONS
 from .core.download import Downloader, run_item
 from .core.limits import DownloadGate, RateLimit
 from .core.sync import MANIFEST_NAME, FileInfo, Manifest, size_range, stamp_folders
-from .core.util import fmt_bytes, parse_size
+from .core.util import fmt_bytes, parse_size, safe_segment
 
 from . import __version__
 from .catalog import Catalog, SET_DATE, parent_of, renamed_path
@@ -147,10 +147,16 @@ class Engine:
         if not path and not kids:
             raise ValueError("pick a folder")
         value = clean_place(place, kids=kids)
+        if value.startswith("/") and not kids:
+            # the column shows and takes full paths: store them relative to where the folder sits
+            # anyway, so a folder kept below its parent moves along when the parent moves
+            others = FolderMap({k: v for k, v in self.fmap.places.items() if k.casefold() != path.casefold()},
+                               self.fmap.kids)
+            value = others.as_typed(path, value)
         key = "folder_kids" if kids else "folder_places"
         cur = dict(self.fmap.kids if kids else self.fmap.places)
         cur = {k: v for k, v in cur.items() if k.casefold() != path.casefold()}
-        if value and not (not kids and value == path.rsplit("/", 1)[-1]):
+        if value and not (not kids and value == safe_segment(path.rsplit("/", 1)[-1])):
             cur[path] = value
         self.catalog.save_settings({key: cur})
         self.fmap = FolderMap(cur, self.fmap.kids) if not kids else FolderMap(self.fmap.places, cur)

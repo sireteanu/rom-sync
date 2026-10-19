@@ -75,7 +75,7 @@ function reorder(container) {
 }
 function reorderAll() {
   reorder(tree);
-  for (const el of nodes.values()) if (open.has(el.dataset.path)) reorder($(".kids", el));
+  for (const el of nodes.values()) if (open.has(el.dataset.path)) reorder($(":scope > .kids", el));
 }
 function showSort() {
   for (const b of document.querySelectorAll(".cols .sort")) {
@@ -153,15 +153,16 @@ function makeNode(n, depth, showPath = false) {
   return el;
 }
 
-/* "Saved as" column: the folder's name in the download folder. Type a name + Enter (or leave the
-   field) to save it under that name; empty = the site's name again. "-date" drops the set date. */
+/* "Saved as" column: the folder's full path in the download folder (/Apple/II). Type another path +
+   Enter (or leave the field) to save it there; empty = back to where it goes by default.
+   "-date" drops the set date from its name. */
 // the set's date at the end of a folder name: "Archimedes (20231029-220453)" or
 // "PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)"
 const SET_DATE = /\s*\((\d{8}-\d{6}|\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})\)$/;
 function fillSavedAs(row, n) {
   const input = $(".as", row);
   if (!input) return;
-  const kb = $(".kids", row);
+  const kb = $(".subs-btn", row);
   kb.hidden = !n.has_children;
   kb.classList.toggle("on", !!n.kids_to);
   kb.title = n.kids_to
@@ -169,20 +170,23 @@ function fillSavedAs(row, n) {
     : "Where its subfolders go (they stay inside it now)";
   kb._kids = n.kids_to || "";
   if (document.activeElement === input) return;     // don't overwrite while typing
-  input.value = n.place || "";
+  input.value = "/" + (n.disk_path || "");
   input.dataset.orig = input.value;
-  input.dataset.custom = n.custom ? "1" : "";
   input.classList.toggle("renamed", !!n.custom);
   input.classList.toggle("moved", !!n.moved);
-  input.placeholder = n.name || "";
-  input.title = `Saved in: ${n.disk_path || "(the download folder)"}`
-    + "\nType a new name or place and press Enter (Archimedes, Extras/Archimedes, /Sega/Archimedes)."
-    + "\nLeave it empty to save it as on the site.";
+  input.placeholder = "/" + (n.disk_path || "");
+  input.title = `Saved in the download folder as ${input.value}`
+    + "\nType another path and press Enter, e.g. /Apple II."
+    + "\nLeave it empty to put it back where it goes by default.";
   input.setAttribute("aria-label", `Where ${n.path} is saved`);
   $(".nodate", row).hidden = !SET_DATE.test(input.value);
 }
+function asFullPath(value) {
+  value = value.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  return value ? "/" + value.replace(/^\/+/, "") : "";
+}
 async function saveName(el, input, value) {
-  value = value.trim();
+  value = asFullPath(value);
   if (value === input.dataset.orig || input.classList.contains("saving")) return;
   input.classList.add("saving");
   try {
@@ -206,9 +210,9 @@ function wireSavedAs(el) {
     else if (e.key === "Escape") { input.value = input.dataset.orig; input.blur(); }
   });
   input.addEventListener("blur", () => {
-    if (!input.classList.contains("saving") && input.value.trim() !== input.dataset.orig) saveName(el, input, input.value);
+    if (!input.classList.contains("saving") && asFullPath(input.value) !== input.dataset.orig) saveName(el, input, input.value);
   });
-  $(".kids", row).addEventListener("click", (e) => {
+  $(".subs-btn", row).addEventListener("click", (e) => {
     e.stopPropagation();
     openKids(el.dataset.path, e.currentTarget._kids);
   });
@@ -265,7 +269,7 @@ async function loadChildren(path, container, depth) {
     container.append(el);
     if (open.has(c.path) && c.has_children) {
       el.classList.add("open");
-      const kids = $(".kids", el);
+      const kids = $(":scope > .kids", el);
       kids.hidden = false;
       loadChildren(c.path, kids, depth + 1);
     }
@@ -277,7 +281,7 @@ async function loadChildren(path, container, depth) {
 async function toggle(el) {
   if (searchMode) return;
   const path = el.dataset.path;
-  const kids = $(".kids", el);
+  const kids = $(":scope > .kids", el);
   if ($(".twisty", el.firstElementChild).classList.contains("leaf")) return;
   if (open.has(path)) {
     open.delete(path);
@@ -308,7 +312,7 @@ async function refreshVisible() {
     if (p !== "" && !nodes.has(p)) continue;
     let data;
     try { data = await api(`/api/tree?path=${encodeURIComponent(p)}`); } catch { continue; }
-    const container = p === "" ? tree : $(".kids", nodes.get(p));
+    const container = p === "" ? tree : $(":scope > .kids", nodes.get(p));
     const own = container.querySelector(":scope > .own-files");
     if (own) fillOwnRow(own, data.node, Number(own.firstElementChild.style.getPropertyValue("--depth")));
     const known = new Set([...container.children].filter((c) => c._n).map((c) => c.dataset.path));

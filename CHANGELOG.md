@@ -5,6 +5,18 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-10-19
+
+### Changed
+- **Saved as shows every folder's full path** in the download folder (`/Apple`, `/Apple/II`). To put a
+  folder somewhere else, type the full path you want (`/Apple II`) and press Enter; clear the field to
+  put it back. A path that stays inside the parent's folder is kept as a rename, so it moves along
+  when you move the parent.
+
+### Fixed
+- **Opened folders stayed blank until the mouse was over them**, and their subfolders were squeezed
+  into the parent's row. The new subfolders button shared a style name with the list of subfolders.
+
 ## [1.4.3] - 2026-10-19
 
 ### Changed

@@ -76,7 +76,7 @@
       <button id="btn-clear-sel" class="btn small ghost" title="Untick everything">Clear selection</button>
     </div>
     <div class="cols">
-      <button class="sort c-name" data-sort="name" title="Sort by name">Folder</button><span class="c-as" title="Where the folder goes in your download folder. Type and press Enter:&#10;Archimedes = a new name, in the same place&#10;Extras/Archimedes = inside a folder in the same place&#10;/Sega/Archimedes = counted from the download folder&#10;Empty = as on the site. The arrow button sets where its subfolders go.">Saved as</span><button class="sort c-num c-files" data-sort="files" title="Sort by number of files">Files</button><button class="sort c-num c-size" data-sort="bytes" title="Sort by size">Size</button>
+      <button class="sort c-name" data-sort="name" title="Sort by name">Folder</button><span class="c-as" title="Where each folder goes in your download folder. Type another path and press Enter, e.g. /Apple II. Subfolders follow their folder. The arrow button sets where a folder's subfolders go.">Saved as</span><button class="sort c-num c-files" data-sort="files" title="Sort by number of files">Files</button><button class="sort c-num c-size" data-sort="bytes" title="Sort by size">Size</button>
       <button class="sort c-date" data-sort="newest" title="Sort by the newest file's date">Updated</button><button class="sort c-meter" data-sort="synced" title="Sort by how much is synced">Synced</button>
     </div>
     <div id="tree" class="tree" role="tree"></div>
@@ -222,7 +222,7 @@
       <button class="twisty" aria-label="Expand"></button>
       <input type="checkbox" class="tick">
       <span class="name"></span>
-      <span class="c-as"><input class="as" spellcheck="false" autocomplete="off"><button class="nodate" type="button" title="Save it without the date" aria-label="Remove the date from the name" hidden>&minus;date</button><button class="kids" type="button" aria-label="Where its subfolders go" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v12h12m0 0-3-3m3 3-3 3"/></svg></button></span>
+      <span class="c-as"><input class="as" spellcheck="false" autocomplete="off"><button class="nodate" type="button" title="Save it without the date" aria-label="Remove the date from the name" hidden>&minus;date</button><button class="subs-btn" type="button" aria-label="Where its subfolders go" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v12h12m0 0-3-3m3 3-3 3"/></svg></button></span>
       <span class="c-num files"></span>
       <span class="c-num size"></span>
       <span class="c-date date"></span>
