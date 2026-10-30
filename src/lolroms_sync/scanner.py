@@ -7,9 +7,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import re
 import time
 from typing import Optional
-from urllib.parse import parse_qsl, quote_plus, urlsplit
+from urllib.parse import parse_qsl, quote_plus, unquote_plus, urlsplit
 from urllib.robotparser import RobotFileParser
 
 import httpx
@@ -31,6 +32,22 @@ def dir_of(url: str) -> str:
         if k.lower() == "dir":
             return v.strip("/")
     return ""
+
+
+# the listing's sort links name the folder actually shown: href="?dir=Acorn&amp;sort=name"
+_SORT_DIR = re.compile(rb'href="[^"]*[?&]dir=([^"&#]*)&(?:amp;)?sort=', re.IGNORECASE)
+
+
+def shown_dir(body: bytes) -> Optional[str]:
+    """The folder a listing page shows, from its sort links; None if it has none.
+
+    Since October 2026 lolroms answers a folder it doesn't have (an old name, e.g. one that lost
+    its set date) with *another* folder's listing and no error, so a page must be checked against
+    the folder that was asked for."""
+    m = _SORT_DIR.search(body)
+    if m is None:
+        return None
+    return unquote_plus(m.group(1).decode("utf-8", "replace")).strip("/")
 
 
 def header_dirs(body: bytes, page_url: str, rules: UrlRules) -> set:
@@ -164,6 +181,14 @@ class Scanner:
                 return
             page = rules.canonical(final) or url
             if body is None or not rules.in_scope(page):
+                return
+            shown = shown_dir(body)
+            if shown is not None and shown.casefold() != path.casefold():
+                # the site showed another folder instead (it no longer has this one): treat it as
+                # gone, so its files aren't dropped as "removed" and a renamed folder is looked for
+                self.catalog.page_failed(path, "not on the site any more")
+                log.info("%s isn't on the site any more (it shows %s instead)", path or "the site root",
+                         shown or "the site root")
                 return
             if len(body) > 300_000:
                 links, files, _ = await asyncio.to_thread(extractor.extract, body, final)

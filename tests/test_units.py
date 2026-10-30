@@ -201,3 +201,24 @@ def test_ticking_keeps_the_cached_tree(tmp_path):
     cat.clear_selection()
     assert cat.tree(None, max_age=0) is t
     assert cat.has_dir("Atari/5200") and cat.has_dir("") and not cat.has_dir("Nope")
+
+
+def test_reading_one_page_never_forgets_its_subfolders_contents(tmp_path):
+    """Reading only a parent's listing links its subfolders without reading them: their files and
+    subfolders must stay in the catalog (this once dropped nearly everything when the site root was
+    re-read to find a renamed top-level folder)."""
+    from lolroms_sync.catalog import Catalog
+    from lolroms_sync.core.sync import FileInfo
+    cat = Catalog(str(tmp_path / "catalog.db"))
+    s1 = cat.start_scan("full", "")
+    cat.add_dirs({"Acorn", "Atari", "Atari/2600"}, s1)
+    cat.page_scanned("", "u", s1, [])
+    cat.page_scanned("Atari", "u", s1, [])
+    cat.page_scanned("Atari/2600", "u", s1, [("https://x/?file=a.7z", "a.7z", "Atari/2600/a.7z", FileInfo(".7z"))])
+    cat.prune(s1, "")
+    s2 = cat.start_scan("folder", "")                     # the root page alone, as for a rename check
+    cat.add_dirs({"Acorn", "Atari"}, s2)
+    cat.page_scanned("", "u", s2, [])
+    assert cat.prune(s2, "") == (0, 0)
+    assert cat.has_dir("Atari/2600")
+    assert cat.files_by_rel({"Atari/2600"}) != {}

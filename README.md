@@ -187,6 +187,12 @@ downloaded before:
   there; its Saved as settings follow (`Engine._follow_map_renames`). During
   the pre-sync refresh, a ticked dated folder that can't be read makes the engine read its parent's
   listing only (`Scanner.run(parent, recurse=False)`), follow the rename, and refresh the new folder.
+- **Files of renamed folders** (`renamed.py`, start of every sync): a folder on disk whose name ends
+  in a set date is merged into its plain-named sibling when the catalog saves a site folder at the
+  plain path and none at the dated one; files move only where nothing is in the way, and their
+  download records move along. `Catalog.prune()` only trusts folders whose page was read in that
+  scan (`scanned >= scan start`), not ones merely linked, so a parent-only read can't drop its
+  subfolders' contents.
 - Files are written as `<name>.part` and renamed when complete. A web page received instead of a
   file is rejected, and archive headers are checked (7z/zip/rar…).
 - **Dates**: lolroms sends no `Last-Modified` header, so the listing date is the only date; files
@@ -371,6 +377,7 @@ src/lolroms_sync/            the web app
                 (effective / effective_files / state_of / select / _fold)
   scanner.py    reads listing pages into the catalog; header_dirs() for header-only sections; prune
   cleanup.py    Clean up: walk the download folder, judge files (gone/part/unticked), delete confirmed ones
+  renamed.py    move files of folders the site renamed (old dated name -> new name) before a sync
   folder_map.py Saved as: where each site folder (and its subfolders) goes on disk
   static/       index.html, app.css, app.js - no build step, no CDN
   core/         the sync engine (from lolroms-downloader; its command-line tool was removed in 1.3.0)
@@ -429,7 +436,13 @@ Verified in a browser (October 2026). If the site changes, these are the first t
 - File responses: `Content-Length`, `Accept-Ranges: bytes`, `Content-Disposition`, served through
   Cloudflare; **no `Last-Modified` or `ETag`**.
 - When the daily download limit is reached the site serves an HTML page instead of the file.
-- Many folders carry the dump set's date at the end of the name, in two forms:
+- **October 2026: folder names lost their set dates** (`Acorn/Archimedes (20231029-220453)` ->
+  `Acorn/Archimedes`), and a `?dir=` the site doesn't have answers **200 with another folder's
+  listing** (the first top-level folder's), not 404. The sort links (`?dir=<shown>&sort=name`) name
+  the folder actually shown; `scanner.shown_dir()` compares it with the folder asked for and treats a
+  mismatch as "not on the site any more". The header gained DATs (`?dir=DATs`, picked up as a
+  top-level folder), RSS (`/rss.xml`, the 100 most recently changed files) and LoLSuite (another site).
+- Before October 2026 many folders carried the dump set's date at the end of the name, in two forms:
   `Archimedes (20231029-220453)` (` (YYYYMMDD-HHMMSS)`) and
   `PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)` (` (YYYY-MM-DD HH-MM-SS)`); seen October 2026.
   `catalog.SET_DATE` and `SET_DATE` in app.js match both.

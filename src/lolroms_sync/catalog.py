@@ -247,12 +247,16 @@ class Catalog:
 
     def prune(self, scan_id: int, root: str) -> tuple:
         """After a completed scan: forget files and folders the site no longer lists - but only
-        under folders whose page was read successfully in this scan."""
+        under folders whose page was read successfully in this scan. Being *linked* in this scan
+        isn't enough: a scan that reads only one page (Scanner.run(recurse=False)) sees its
+        subfolders without reading them, and their contents must stay."""
         like = (root + "/%") if root else "%"
         with self.lock:
+            row = self.db.execute("SELECT started FROM scans WHERE id=?", (scan_id,)).fetchone()
+            started = row[0] if row and row[0] is not None else 0.0
             ok = {r[0] for r in self.db.execute(
-                "SELECT path FROM dirs WHERE seen_scan=? AND scanned IS NOT NULL AND error IS NULL "
-                "AND (path=? OR path LIKE ?)", (scan_id, root, like))}
+                "SELECT path FROM dirs WHERE seen_scan=? AND scanned >= ? AND error IS NULL "
+                "AND (path=? OR path LIKE ?)", (scan_id, started, root, like))}
             gone_files = [r[0] for r in self.db.execute(
                 "SELECT url, dir FROM files WHERE (seen_scan IS NULL OR seen_scan<>?) "
                 "AND (dir=? OR dir LIKE ?)", (scan_id, root, like)) if r[1] in ok]

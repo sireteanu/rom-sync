@@ -104,7 +104,12 @@ typing the platform, for example *32x* or *super nintendo*, and pick it from the
 RomM's folder name (`/sega32`); press Enter to save. To keep a folder *inside* a platform, add to it:
 `/sega32/Extras`. A small badge next to the field shows which RomM platform a folder is saved under.
 
-Many folders on lolroms carry the date of their set, like *Archimedes (20231029-220453)*. Hover over
+**When the site renames a folder** (in October 2026 it dropped the date from every folder name),
+Rom Sync notices at the next scan or sync: your ticks and Saved as move to the new name, and files
+it already downloaded are moved into the new folder instead of being downloaded again. Run a sync
+before using Clean up after such a change, so files still in an old folder are moved first.
+
+Many folders on lolroms carried the date of their set, like *Archimedes (20231029-220453)*. Hover over
 the row and click **−date** to save it as just *Archimedes*. When the site later moves the folder to a
 newer date, your ticks and where you save it go along with it, and only new or changed files are
 downloaded.

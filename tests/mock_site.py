@@ -15,7 +15,9 @@ Modes (combine with commas):
   bulk        adds Atari/Bulk with 60 slow-ish files (for parallel-download tests)
   brokenfile  adds Atari/5200/Broken.7z, which always answers 502 (the site itself is fine)
   dated       adds Acorn/Archimedes (20231029-220453), a folder named after its set's date like
-              many real lolroms folders
+              many real lolroms folders, and a top-level one, Watara - Supervision (20250625-093232)
+  fallback    a folder the site doesn't have answers 200 with the first top-level folder's
+              listing instead of 404 (lolroms since October 2026)
 Attributes you can change while a test runs:
   max_conc    downloads allowed at once; more get 503 + Retry-After: 1 (None = unlimited)
   daily_limit after this many completed downloads every file answers with an HTML limit page
@@ -81,10 +83,14 @@ class MockSite:
             self.files["Atari/5200"].append("Limited.7z")
         if "brokenfile" in self.modes:
             self.files["Atari/5200"].append("Broken.7z")
+        self.top = list(TOP)
         if "dated" in self.modes:
             self.tree["Acorn"].append("Archimedes (20231029-220453)")
             self.tree["Acorn/Archimedes (20231029-220453)"] = []
             self.files["Acorn/Archimedes (20231029-220453)"] = ["Zarch.7z"]
+            self.top.append("Watara - Supervision (20250625-093232)")
+            self.tree["Watara - Supervision (20250625-093232)"] = []
+            self.files["Watara - Supervision (20250625-093232)"] = ["Alien.7z"]
         if "bulk" in self.modes:
             self.tree["Atari"].append("Bulk")
             self.tree["Atari/Bulk"] = []
@@ -146,6 +152,8 @@ class MockSite:
                     d = qs["dir"][0]
                     if d in site.tree or d in site.files:
                         return self._send(200, site.listing(d).encode())
+                    if "fallback" in site.modes:
+                        return self._send(200, site.listing(site.top[0]).encode())
                     return self._send(404, b"not found")
                 if u.path == "/":
                     return self._send(200, site.listing("").encode())
@@ -258,6 +266,18 @@ class MockSite:
         version, _, extra = self._version(path)
         return f'"{version}-{extra}"'
 
+    def rename_dir(self, old: str, new: str) -> None:
+        """The site renames a folder (and everything below it), e.g. drops its set date."""
+        parent = old.rsplit("/", 1)[0] if "/" in old else ""
+        oname, nname = old.rsplit("/", 1)[-1], new.rsplit("/", 1)[-1]
+        if parent:
+            self.tree[parent] = [nname if n == oname else n for n in self.tree[parent]]
+        else:
+            self.top = [nname if n == oname else n for n in self.top]
+        for table in (self.tree, self.files):
+            for k in [k for k in table if k == old or k.startswith(old + "/")]:
+                table[new + k[len(old):]] = table.pop(k)
+
     def modify(self, path: str, date: str, grow: int = 0) -> None:
         """Simulate the site replacing a file (new content, date, optionally new size)."""
         version, _, extra = self._version(path)
@@ -272,7 +292,7 @@ class MockSite:
         meta = "nometa" not in self.modes
         tables = "tables" in self.modes
         rows = ""
-        for k in (TOP if d == "" else self.tree.get(d, [])):
+        for k in (self.top if d == "" else self.tree.get(d, [])):
             href = f"?dir={_q(d + '/' + k if d else k)}"
             rows += (f'<tr><td><a href="/{href}">{k}</a></td><td></td><td></td></tr>' if tables
                      else f'<div class="row"><a href="{href}">\U0001F4C1 {k}</a></div>')

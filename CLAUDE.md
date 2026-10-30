@@ -70,6 +70,10 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   no rules dialog, no subfolders button (removed in 1.4.6), no text file. Keep it fast: the owner
   renames almost every folder, mostly to RomM platform folders (Enter / blur saves, "−date",
   RomM suggestions). Saving, and every start, runs `Catalog.remap(engine.rel_of)`.
+- **Missing folders**: lolroms answers an unknown `?dir=` with another folder's listing (200). Always
+  check a listing with `scanner.shown_dir()` before trusting it, and never let `Catalog.prune()`
+  trust a folder that was only linked in a scan. Renamed folders: ticks and Saved as follow
+  (`follow_renames`), files on disk follow (`renamed.py`) - never re-download what only moved.
 - **Ticks** must stay quick for many clicks in a row: never invalidate the tree on a tick, and keep
   app.js `select()` serialised with the `selEpoch` guard in `refreshVisible()`.
 - **Renamed folders**: lolroms renames dated folders when a newer set arrives. `Catalog.follow_renames()`

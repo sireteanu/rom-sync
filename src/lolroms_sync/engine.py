@@ -25,6 +25,7 @@ from . import __version__
 from .catalog import Catalog, SET_DATE, parent_of, renamed_path
 from .core.urls import UrlRules
 from .folder_map import FolderMap, clean_place, from_old_settings
+from .renamed import merge_renamed_folders
 from .scanner import Scanner
 
 log = logging.getLogger("dircrawl")
@@ -399,6 +400,9 @@ class Engine:
         """"Saved as" settings of folders the site renamed to a newer set date follow them."""
         rename = lambda p: renamed_path(p, renamed)                     # noqa: E731
         places, kids = FolderMap.renamed(self.fmap.places, rename), FolderMap.renamed(self.fmap.kids, rename)
+        # a Saved as that is now just the folder's own name (−date on a folder the site has since
+        # renamed without the date) isn't a setting any more
+        places = {k: v for k, v in places.items() if v != safe_segment(k.rsplit("/", 1)[-1])}
         if places == self.fmap.places and kids == self.fmap.kids:
             return
         self.catalog.save_settings({"folder_places": places, "folder_kids": kids})
@@ -421,6 +425,14 @@ class Engine:
             if self.stop_requested:
                 return {}
         self.scanner = None
+        # folders the site renamed (e.g. dropped their set date): move what's already downloaded
+        # to the new name first, so it isn't downloaded again
+        self.job["phase"] = "checking the download folder"
+        disk_folders = {self.fmap.disk_folder(p) for p in self.catalog.tree(None)}
+        try:
+            await asyncio.to_thread(merge_renamed_folders, data_dir, disk_folders)
+        except Exception as e:  # never let tidying fail a sync
+            log.warning("Could not move files of renamed folders: %s", e)
         self.job["phase"] = "checking what needs downloading"
         files = self.catalog.files_under(self.catalog.selected_dirs(), types)
         recognised = DOWNLOAD_EXTENSIONS | (types or frozenset())

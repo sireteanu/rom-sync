@@ -5,6 +5,24 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.7] - 2026-10-30
+
+lolroms dropped the set date from every folder name ("Acorn/Risc PC (Flux) (20230506-040449)" is now
+"Acorn/Risc PC (Flux)") and now answers a folder it doesn't have with another folder's listing
+instead of an error. This release keeps syncs working through that.
+
+### Fixed
+- **A folder the site no longer has is recognised as gone** even though the site shows another
+  folder's listing for it. Before, a sync could take that other folder's files for the ticked
+  folder's (and download them), or decide the folder was empty.
+- **Renamed folders keep your files.** Files downloaded under a folder's old dated name are moved
+  into its new name at the start of a sync, with their download record, instead of being downloaded
+  again. Ticks and Saved as follow the folder as before; a Saved as made with −date that is now just
+  the folder's own name is dropped.
+- **Re-reading one folder to find a renamed subfolder no longer makes Rom Sync forget what's in the
+  other subfolders.** For a renamed top-level folder this could empty most of the catalog, and
+  Clean up could then offer your files as "no longer on the site".
+
 ## [1.4.6] - 2026-10-19
 
 ### Fixed

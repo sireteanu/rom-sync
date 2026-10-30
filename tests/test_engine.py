@@ -620,3 +620,79 @@ def test_saved_as_takes_full_paths(site, app_factory):
     assert (k["2600"]["disk_path"], k["5200"]["disk_path"], k["Lynx"]["disk_path"]) == \
         ("Atari/VCS", "Atari 5200", "Atari/Lynx")
     assert place("Atari/Lynx", "/Atari/Lynx") == "" and kids(c, "Atari")["Lynx"]["custom"] is False
+
+
+WATARA_OLD = "Watara - Supervision (20250625-093232)"
+DATED = {f"Acorn/{OLD_SET}": "Acorn/Archimedes", WATARA_OLD: "Watara - Supervision"}
+ATARI_2600 = {"Atari/2600/Adventure (USA).7z", "Atari/2600/Pitfall! (USA).7z", "Atari/2600/Combat_ Tank _Plus_.7z"}
+
+
+def _drop_dates_setup(site_factory, app_factory, saved_as=None):
+    from conftest import on_disk, scan, select, sync
+    site = site_factory("dated,fallback")
+    c = app_factory(site)
+    scan(c)
+    for path in (*DATED, "Atari/2600"):
+        select(c, path)
+    for path, place in (saved_as or {}).items():
+        assert c.post("/api/folder-place", json={"path": path, "place": place}).status_code == 200
+    sync(c)
+    before = on_disk(c.data)
+    for old, new in DATED.items():                    # October 2026: lolroms drops the set dates
+        site.rename_dir(old, new)
+    return site, c, before
+
+
+def test_site_dropping_set_dates_moves_files_instead_of_downloading_again(site_factory, app_factory):
+    """No scan in between, unknown folders answer with another folder's listing (like the real
+    site): the sync notices the renames, moves the ticks, moves the files on disk to the new folder
+    names, downloads nothing again, and forgets nothing about the other ticked folders."""
+    from conftest import kids, on_disk, sync
+    site, c, before = _drop_dates_setup(site_factory, app_factory)
+    assert before == {f"Acorn/{OLD_SET}/Zarch.7z", f"{WATARA_OLD}/Alien.7z"} | ATARI_2600
+    n = len(site.file_requests())
+    sync(c)
+    assert len(site.file_requests()) == n                                 # nothing downloaded again
+    assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z", "Watara - Supervision/Alien.7z"} | ATARI_2600
+    assert not (c.data / "Acorn" / OLD_SET).exists() and not (c.data / WATARA_OLD).exists()
+    assert kids(c, "Acorn")["Archimedes"]["state"] == "on" and OLD_SET not in kids(c, "Acorn")
+    top = kids(c)
+    assert top["Watara - Supervision"]["state"] == "on" and WATARA_OLD not in top
+    assert kids(c, "Atari")["2600"]["files"] == 3                         # siblings stay in the catalog
+    assert c.get("/api/cleanup").json()["files"] == []
+    log = " ".join(l["msg"] for l in c.get("/api/status", params={"log_since": 0}).json()["log"])
+    assert "isn't on the site any more" in log and "Moved 1 file from" in log
+
+
+def test_site_dropping_set_dates_found_by_a_full_scan(site_factory, app_factory):
+    from conftest import kids, on_disk, scan, sync
+    site, c, _ = _drop_dates_setup(site_factory, app_factory)
+    scan(c)
+    assert kids(c, "Acorn")["Archimedes"]["state"] == "on"
+    n = len(site.file_requests())
+    sync(c)
+    assert len(site.file_requests()) == n
+    assert on_disk(c.data) == {"Acorn/Archimedes/Zarch.7z", "Watara - Supervision/Alien.7z"} | ATARI_2600
+
+
+def test_minus_date_names_become_plain_when_the_site_drops_the_date(site_factory, app_factory):
+    """A folder saved without its date (−date) keeps its place; the Saved as setting, now equal to
+    the folder's own name, is dropped."""
+    from conftest import kids, on_disk, sync
+    site, c, before = _drop_dates_setup(site_factory, app_factory, {f"Acorn/{OLD_SET}": "Archimedes"})
+    assert "Acorn/Archimedes/Zarch.7z" in before
+    n = len(site.file_requests())
+    sync(c)
+    assert len(site.file_requests()) == n
+    node = kids(c, "Acorn")["Archimedes"]
+    assert (node["custom"], node["disk_path"]) == (False, "Acorn/Archimedes")
+    assert c.get("/api/settings").json()["settings"]["folder_places"] == {}
+    assert "Acorn/Archimedes/Zarch.7z" in on_disk(c.data)
+
+
+def test_a_page_showing_another_folder_counts_as_missing():
+    from lolroms_sync.scanner import shown_dir
+    assert shown_dir(b'<a href="?dir=Acorn&amp;sort=name">Name</a>') == "Acorn"
+    assert shown_dir(b'<a href="https://lolroms.com/?dir=Acorn%2FRisc+PC+%28Flux%29&sort=date">D</a>') == "Acorn/Risc PC (Flux)"
+    assert shown_dir(b'<a href="?dir=&amp;sort=size">S</a>') == ""
+    assert shown_dir(b"<p>no sort bar</p>") is None
