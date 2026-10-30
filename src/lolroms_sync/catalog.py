@@ -26,6 +26,8 @@ DEFAULT_SETTINGS = {
     "min_free": "2G",
     "file_mode": "777",             # permissions for downloaded files and new folders; "" = system default
     "refresh_before_sync": True,    # re-read the selected folders' listings before syncing
+    "use_feed": True,               # ...only those the site's list of recent changes names (feed.py)
+    "feed_state": {},               # internal: when ticked folders were last read (feed.py)
     "resume_interrupted": True,     # restart a sync that was cut off (crash, reboot, restart)
     "interrupted_job": "",          # set while a sync runs; cleared when it ends normally
     "check_remote": False,

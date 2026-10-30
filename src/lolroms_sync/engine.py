@@ -26,6 +26,7 @@ from .catalog import Catalog, SET_DATE, parent_of, renamed_path
 from .core.urls import UrlRules
 from .folder_map import FolderMap, clean_place, from_old_settings
 from .renamed import merge_renamed_folders
+from . import feed as sitefeed
 from .scanner import Scanner
 
 log = logging.getLogger("dircrawl")
@@ -264,9 +265,10 @@ class Engine:
             if k == "outage_wait_hours":
                 v = max(0.0, float(v or 0))
                 v = int(v) if v == int(v) else v
-            if k in ("interrupted_job", "folder_map", "folder_names", "folder_places", "folder_kids"):
+            if k in ("interrupted_job", "folder_map", "folder_names", "folder_places", "folder_kids",
+                     "feed_state"):
                 continue
-            if k in ("refresh_before_sync", "check_remote", "resume_interrupted"):
+            if k in ("refresh_before_sync", "check_remote", "resume_interrupted", "use_feed"):
                 v = bool(v)
             if k == "file_mode":
                 v = parse_mode(v)
@@ -365,9 +367,12 @@ class Engine:
             self.catalog.invalidate()            # final numbers show right away
             self._schedule_next()
 
-    async def _scan(self, client, robots, root: str = "", roots=None) -> dict:
+    async def _scan(self, client, robots, root: str = "", roots=None, pages=()) -> dict:
+        """Read the site: root and everything below it, or each of roots; pages: folders to read
+        one page each (from the list of recent changes)."""
         out: dict = {}
         renamed: dict = {}
+        started = time.time()
 
         async def run(r: str, recurse: bool = True) -> dict:
             self.scanner = Scanner(self.catalog, self.base, client, workers=self.scan_workers,
@@ -392,9 +397,47 @@ class Engine:
                     new = renamed_path(r, renamed)
                     if new != r and not self.stop_requested:
                         out[new] = await run(new)
+        for d in pages:
+            if self.stop_requested:
+                break
+            out[d or "/"] = await run(d, recurse=False)
         if renamed:
             self._follow_map_renames(renamed)
+        if roots is None and not root and (out.get("/") or {}).get("status") == "done":
+            st = dict(self.catalog.settings().get("feed_state") or {})
+            st["site_read"] = started - sitefeed.MARGIN
+            self.catalog.save_settings({"feed_state": st})
         return out
+
+    async def _feed_plan(self, client, robots, roots: list) -> Optional[dict]:
+        """Read the site's list of recent changes and decide which ticked folders need re-reading
+        (feed.py). None: no usable list - re-read everything as usual."""
+        url = self.base + sitefeed.FEED_PATH
+        if robots is not None and not robots.can_fetch(USER_AGENT, url):
+            return None
+        try:
+            r = await client.get(url, timeout=30)
+            if r.status_code != 200:
+                log.debug("no list of recent changes on the site (HTTP %s)", r.status_code)
+                return None
+            items, built = sitefeed.parse_feed(r.content[:8_000_000])
+        except (httpx.HTTPError, ValueError) as e:
+            log.info("Couldn't use the site's list of recent changes (%s) - re-reading all ticked folders", e)
+            return None
+        p = sitefeed.plan(roots, self.catalog.settings().get("feed_state") or {}, items, built, time.time())
+        if p["covered"]:
+            if p["folders"]:
+                log.info("Recent changes on the site: %d of your folders changed - re-reading just those",
+                         len(p["folders"]))
+            else:
+                log.info("Recent changes on the site: nothing new in %d of your ticked folders - "
+                         "no need to re-read them", len(p["covered"]))
+        why: dict = {}
+        for r, reason in p["reasons"].items():
+            why.setdefault(reason, []).append(r or "the whole site")
+        for reason, rs in why.items():
+            log.info("Re-reading %d ticked %s in full: %s", len(rs), "folder" if len(rs) == 1 else "folders", reason)
+        return p
 
     def _follow_map_renames(self, renamed: dict) -> None:
         """"Saved as" settings of folders the site renamed to a newer set date follow them."""
@@ -421,9 +464,18 @@ class Engine:
             return {"files": 0}
         if s["refresh_before_sync"]:
             self.job["phase"] = "refreshing the selected folders"
-            await self._scan(client, robots, roots=roots)
+            full, covered, pages, known = roots, [], [], 0.0
+            if s.get("use_feed", True):
+                p = await self._feed_plan(client, robots, roots)
+                if p is not None:
+                    full, covered, pages, known = p["full"], p["covered"], p["folders"], p["known"]
+            started = time.time()
+            await self._scan(client, robots, roots=full, pages=pages)
             if self.stop_requested:
                 return {}
+            self.catalog.save_settings({"feed_state": sitefeed.updated_state(
+                self.catalog.settings().get("feed_state") or {}, self.catalog.selection_roots(),
+                full, started, covered, known)})
         self.scanner = None
         # folders the site renamed (e.g. dropped their set date): move what's already downloaded
         # to the new name first, so it isn't downloaded again

@@ -696,6 +696,7 @@ $("#btn-settings").addEventListener("click", async () => {
   form.sync_every_hours.value = s.sync_every_hours;
   form.full_scan_every_days.value = s.full_scan_every_days;
   form.refresh_before_sync.checked = !!s.refresh_before_sync;
+  form.use_feed.checked = s.use_feed !== false;
   form.check_remote.checked = !!s.check_remote;
   form.outage_wait_hours.value = s.outage_wait_hours ?? 12;
   form.resume_interrupted.checked = s.resume_interrupted !== false;
@@ -716,6 +717,7 @@ $("#settings-save").addEventListener("click", async (e) => {
     sync_every_hours: form.sync_every_hours.value || 0,
     full_scan_every_days: form.full_scan_every_days.value || 0,
     refresh_before_sync: form.refresh_before_sync.checked,
+    use_feed: form.use_feed.checked,
     check_remote: form.check_remote.checked,
     outage_wait_hours: form.outage_wait_hours.value || 0,
     resume_interrupted: form.resume_interrupted.checked,

@@ -74,6 +74,9 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   check a listing with `scanner.shown_dir()` before trusting it, and never let `Catalog.prune()`
   trust a folder that was only linked in a scan. Renamed folders: ticks and Saved as follow
   (`follow_renames`), files on disk follow (`renamed.py`) - never re-download what only moved.
+- **Feed shortcut** (`feed.py`): only ever a way to skip work. When in doubt (feed too short, missing,
+  unparsable, folder not fully read for a day) re-read in full. Never let it decide that files are
+  gone - deletions and renames come from real listings only.
 - **Ticks** must stay quick for many clicks in a row: never invalidate the tree on a tick, and keep
   app.js `select()` serialised with the `selEpoch` guard in `refreshVisible()`.
 - **Renamed folders**: lolroms renames dated folders when a newer set arrives. `Catalog.follow_renames()`

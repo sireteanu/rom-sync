@@ -5,6 +5,16 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.8] - 2026-10-30
+
+### New
+- **Syncs use the site's list of recent changes** (lolroms.com/rss.xml) to skip re-reading ticked
+  folders that haven't changed: before a sync, only the folders with new or changed files are
+  re-read, often none. Whenever the list can't vouch for a folder (it doesn't reach back to the
+  last sync, the site has no list, or the folder hasn't been re-read in full for a day), that
+  folder is re-read in full as before. The log says which happened. Settings → "… only the ones the
+  site's list of recent changes names" turns it off.
+
 ## [1.4.7] - 2026-10-30
 
 lolroms dropped the set date from every folder name ("Acorn/Risc PC (Flux) (20230506-040449)" is now

@@ -104,6 +104,12 @@ typing the platform, for example *32x* or *super nintendo*, and pick it from the
 RomM's folder name (`/sega32`); press Enter to save. To keep a folder *inside* a platform, add to it:
 `/sega32/Extras`. A small badge next to the field shows which RomM platform a folder is saved under.
 
+**Quicker syncs.** Before a sync, Rom Sync reads the site's list of recently changed files and
+re-reads only the ticked folders that have something new; if nothing changed, it goes straight to
+checking your files. Every ticked folder is still re-read in full at least once a day, and whenever
+the list doesn't reach back to your last sync. The log says which it did. To always re-read
+everything, untick "… only the ones the site's list of recent changes names" in Settings.
+
 **When the site renames a folder** (in October 2026 it dropped the date from every folder name),
 Rom Sync notices at the next scan or sync: your ticks and Saved as move to the new name, and files
 it already downloaded are moved into the new folder instead of being downloaded again. Run a sync

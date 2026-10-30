@@ -187,6 +187,14 @@ downloaded before:
   there; its Saved as settings follow (`Engine._follow_map_renames`). During
   the pre-sync refresh, a ticked dated folder that can't be read makes the engine read its parent's
   listing only (`Scanner.run(parent, recurse=False)`), follow the rename, and refresh the new folder.
+- **List of recent changes** (`feed.py`, `/rss.xml`: `<item>` with a `?file=` link and `pubDate`, no
+  sizes; ~100-200 files, often under a day). Before a sync's refresh, `Engine._feed_plan()` reads it;
+  `feed.plan()` lets a ticked root skip its full re-read only if the feed's oldest item is no newer
+  than the moment its contents were last known and it had a full re-read within `FULL_EVERY` (24 h).
+  For such roots only folders with items newer than that are read, one page each
+  (`Scanner.run(recurse=False)`). Times live in the internal `feed_state` setting (`site_read` from
+  the last finished full scan; per root `read`/`known`), moved back by `MARGIN` (10 min) for clock
+  differences. No feed, a bad feed or `use_feed: false` = the old full refresh.
 - **Files of renamed folders** (`renamed.py`, start of every sync): a folder on disk whose name ends
   in a set date is merged into its plain-named sibling when the catalog saves a site folder at the
   plain path and none at the dated one; files move only where nothing is in the way, and their
@@ -297,6 +305,8 @@ Stored in the catalog (`settings` table); changed in the Settings dialog or `POS
 | `check_remote` | `false` | Ask the server about every existing file (exact, one request per file) |
 | `outage_wait_hours` | `12` | How long a sync waits for the site when it's down before pausing (0 = don't wait; files then fail after their retries) |
 | `interrupted_job` | `""` | Internal: set while a sync runs |
+| `use_feed` | `true` | Before a sync, re-read only the ticked folders the site's list of recent changes names |
+| `feed_state` | `{}` | Internal: when ticked folders were last read in full / known (feed.py) |
 | `folder_places` | `{}` | Saved as: `{site folder: place}`; changed only with `POST /api/folder-place` |
 | `folder_map`, `folder_names`, `folder_kids` | | From 1.3.10-1.4.5; converted to `folder_places` at start, then emptied |
 
@@ -378,6 +388,7 @@ src/lolroms_sync/            the web app
   scanner.py    reads listing pages into the catalog; header_dirs() for header-only sections; prune
   cleanup.py    Clean up: walk the download folder, judge files (gone/part/unticked), delete confirmed ones
   renamed.py    move files of folders the site renamed (old dated name -> new name) before a sync
+  feed.py       the site's list of recent changes: which ticked folders a sync must re-read
   folder_map.py Saved as: where each site folder (and its subfolders) goes on disk
   static/       index.html, app.css, app.js - no build step, no CDN
   core/         the sync engine (from lolroms-downloader; its command-line tool was removed in 1.3.0)
@@ -441,7 +452,7 @@ Verified in a browser (October 2026). If the site changes, these are the first t
   listing** (the first top-level folder's), not 404. The sort links (`?dir=<shown>&sort=name`) name
   the folder actually shown; `scanner.shown_dir()` compares it with the folder asked for and treats a
   mismatch as "not on the site any more". The header gained DATs (`?dir=DATs`, picked up as a
-  top-level folder), RSS (`/rss.xml`, the 100 most recently changed files) and LoLSuite (another site).
+  top-level folder), RSS (`/rss.xml`, the most recently changed files; used by `feed.py`) and LoLSuite (another site).
 - Before October 2026 many folders carried the dump set's date at the end of the name, in two forms:
   `Archimedes (20231029-220453)` (` (YYYYMMDD-HHMMSS)`) and
   `PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)` (` (YYYY-MM-DD HH-MM-SS)`); seen October 2026.

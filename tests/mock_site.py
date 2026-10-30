@@ -16,6 +16,8 @@ Modes (combine with commas):
   brokenfile  adds Atari/5200/Broken.7z, which always answers 502 (the site itself is fine)
   dated       adds Acorn/Archimedes (20231029-220453), a folder named after its set's date like
               many real lolroms folders, and a top-level one, Watara - Supervision (20250625-093232)
+  feed        serves /rss.xml like lolroms: the `feed_cap` most recently changed files, newest
+              first (modify() and add_file() add entries; it starts with old entries elsewhere)
   fallback    a folder the site doesn't have answers 200 with the first top-level folder's
               listing instead of 404 (lolroms since October 2026)
 Attributes you can change while a test runs:
@@ -96,6 +98,9 @@ class MockSite:
             self.tree["Atari/Bulk"] = []
             self.files["Atari/Bulk"] = [f"Bulk {i:02d}.7z" for i in range(60)]
         self.versions: dict = {}           # file path -> (version, date, extra bytes)
+        self.feed_cap = 100
+        # (file path, epoch) newest last; old entries elsewhere so the feed reaches back far
+        self.feed = [("Arcade/Pac.7z", time.time() - 30 * 86400)] if "feed" in self.modes else []
         self.max_conc = None
         self.daily_limit = None
         self.down = None
@@ -144,6 +149,10 @@ class MockSite:
                                                  b"<body>The web server is not responding.</body></html>")
                 if u.path == "/robots.txt":
                     return self._send(404, b"")
+                if u.path == "/rss.xml":
+                    if "feed" not in site.modes:
+                        return self._send(404, b"not found")
+                    return self._send(200, site.rss(), "application/rss+xml")
                 if "file" in qs:
                     return self._file(qs["file"][0])
                 if "dir" in qs:
@@ -282,6 +291,23 @@ class MockSite:
         """Simulate the site replacing a file (new content, date, optionally new size)."""
         version, _, extra = self._version(path)
         self.versions[path] = (version + 1, date, extra + grow)
+        self.feed.append((path, time.time()))
+
+    def add_file(self, folder: str, name: str) -> None:
+        """A new file appears on the site (and in its list of recent changes)."""
+        self.files.setdefault(folder, []).append(name)
+        self.feed.append((f"{folder}/{name}", time.time()))
+
+    def rss(self) -> bytes:
+        items = sorted(self.feed, key=lambda e: e[1], reverse=True)[: self.feed_cap]
+        out = "".join(
+            f"<item><title>{f.rsplit('/', 1)[-1]}</title><link>https://lolroms.com/?file={_q(f)}</link>"
+            f"<guid>https://lolroms.com/?file={_q(f)}</guid><pubDate>{formatdate(t, usegmt=True)}</pubDate></item>"
+            for f, t in items).replace("&", "&amp;")
+        return (f'<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>LoLROMs Files'
+                f'</title><link>https://lolroms.com/</link><description>{self.feed_cap} most recently modified '
+                f'files</description><lastBuildDate>{formatdate(time.time(), usegmt=True)}</lastBuildDate>'
+                f'{out}</channel></rss>').encode()
 
     def listing(self, d: str) -> str:
         """lolroms' real markup (checked against the live site, Oct 2026):
