@@ -46,7 +46,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 | Sync | Downloads only what's missing, half-finished (`.part`, resumed) or changed on the site (date or size in the listing differs). Unchanged files cost no network request. |
 | Dates | Each saved file gets the date the website lists for it (12:00 local time). After a sync, each folder gets the date of its newest file. |
 | Permissions | Downloaded files and new folders get mode **777** by default (setting). |
-| Speed | Parallel downloads ramp up until the server pushes back, settle one below, re-probe every 2 minutes and remember the limit. Optional speed cap and free-space guard. |
+| Speed | Parallel downloads ramp up until the server pushes back, settle one below, re-probe every 2 minutes and remember the limit. Each download has its own connection. Optional speed cap and free-space guard. |
 | Site outages | When lolroms itself stops answering (5xx/Cloudflare 52x, timeouts, refused connections), a file that has failed 3 times because of it triggers a check of the site; if the site is down, downloads **wait** for it (re-checking every 30 s, doubling to every 10 min) instead of failing, and carry on when it's back. After "When the site is down, wait up to" (default 12 h) the sync pauses; the next sync continues. |
 | Daily limit | If lolroms starts sending its "download limit" web page instead of files, downloads pause and continue at the next sync. |
 | Progress | Activity panel (counts, speed, parallel downloads - click New, Updated, Resumed, Up to date or Failed to see those files), **This sync** box (total size, files left, time remaining), **Downloading** box (one progress bar per file), live log. |
@@ -214,6 +214,9 @@ downloaded before:
   below; a level that worked before needs two push-backs within 10 s to be lowered; every 2 minutes
   it tries one more. Pushed-back files go back in the queue without using their retries. Setting
   "Fixed number" disables this.
+- **Connections** (`Engine._client`): downloads use their own HTTP/1.1 client, one connection per
+  parallel download, so a site that limits speed per connection doesn't cap them all together (over
+  HTTP/2 they would all be streams in one connection). Scanning listings uses a shared HTTP/2 client.
 - **Site outages** (`Downloader.wait_for_site`): errors caused by the site (HTTP 500/502/503/504/52x,
   timeouts, refused or dropped connections) count per file; after 3 of them the downloader asks the
   site root (`site_up()`: any answer below 500 = up). If it answers, the file keeps its normal retries
@@ -353,7 +356,7 @@ folder including `.dir_crawler.db` to avoid downloading again (files are adopted
 ### Rom Sync can't reach the site
 
 When the log says Rom Sync can't reach the site but it loads in a browser, run this on the server to
-see which way of connecting fails (Rom Sync uses HTTP/2 by default):
+see which way of connecting fails (Rom Sync reads listings over HTTP/2 and downloads files over HTTP/1.1):
 
 ```
 docker exec -i rom-sync python - <<'PY'

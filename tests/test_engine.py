@@ -315,6 +315,24 @@ def test_fixed_number_of_parallel_downloads(site_factory, app_factory):
     assert site.peak_active == 3
 
 
+
+def test_downloads_get_their_own_connections_listings_share_http2(tmp_path):
+    """Over HTTP/2 all parallel downloads would be streams in one connection, and a server that
+    limits speed per connection would cap them together - so downloads use HTTP/1.1."""
+    import asyncio
+    from lolroms_sync.engine import Engine
+
+    def http2(client):
+        return client._transport._pool._http2
+
+    async def check():
+        e = Engine(str(tmp_path / "c"), str(tmp_path / "d"), "http://127.0.0.1:1/")
+        async with e._client() as listings, e._client(downloads=True) as downloads:
+            assert http2(listings) is True
+            assert http2(downloads) is False
+            assert downloads._transport._pool._max_connections >= 16
+    asyncio.run(check())
+
 def test_daily_limit_pauses_and_the_next_sync_finishes(site, app_factory):
     site.daily_limit = 3
     c = app_factory(site)

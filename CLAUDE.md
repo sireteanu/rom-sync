@@ -93,6 +93,9 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   Manifest uses `check_same_thread=False`, safe because downloads start only after planning) and the
   Clean up check. Planning stats each file once and passes `st` on; never chmod/utime a file whose
   mode/date already match (shares like Unraid's array make each call slow).
+- **Connections**: `Engine._client(downloads=True)` is HTTP/1.1 (one connection per parallel
+  download); listings use the shared HTTP/2 client. Don't put downloads back on HTTP/2: they'd all
+  share one connection, and a per-connection speed limit would cap the whole sync.
 - Status `selection` is cached per (tree object, rules) in `Engine._selection_totals()`.
 - The page stops polling while its tab is hidden (`visibilitychange`); replies over 1 KB are gzipped
   (`GZipMiddleware`).

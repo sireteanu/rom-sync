@@ -5,6 +5,14 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.10] - 2026-10-30
+
+### Improved
+- **Faster downloads when the site limits speed per connection**: each parallel download now gets
+  its own connection to the site. Before, all downloads shared one HTTP/2 connection, so a site
+  that caps each connection capped them all together, however many ran at once. Reading the
+  site's folder listings still shares one connection.
+
 ## [1.4.9] - 2026-10-30
 
 ### Changed

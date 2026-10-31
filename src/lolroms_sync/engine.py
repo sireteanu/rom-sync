@@ -320,9 +320,15 @@ class Engine:
             self.downloader.stop_requested = True
         log.info("Stopping...")
 
-    def _client(self) -> httpx.AsyncClient:
-        http2 = importlib.util.find_spec("h2") is not None
-        n = self.scan_workers + int(self.catalog.settings().get("parallel_max") or 16) + 2
+    def _client(self, downloads: bool = False) -> httpx.AsyncClient:
+        """HTTP client. Listing pages share one HTTP/2 connection (cheap, many small pages).
+        Downloads use HTTP/1.1 so that each parallel download gets its own connection: over
+        HTTP/2 every download is a stream inside one connection to the site, and a server that
+        limits speed per connection then caps all of them together."""
+        http2 = not downloads and importlib.util.find_spec("h2") is not None
+        n = int(self.catalog.settings().get("parallel_max") or 16) + 2
+        if not downloads:
+            n += self.scan_workers
         return httpx.AsyncClient(http2=http2, follow_redirects=True, max_redirects=8,
                                  timeout=httpx.Timeout(15.0, connect=10.0),
                                  limits=httpx.Limits(max_connections=n, max_keepalive_connections=n),
@@ -617,6 +623,7 @@ class Engine:
                     manifest.commit()
                     self.catalog.commit()
 
+        dl.client = dl_client = self._client(downloads=True)   # one connection per download (see _client)
         n = self.gate.hard_max if auto else self.gate.limit
         tasks = [asyncio.create_task(worker()) for _ in range(n)] + [asyncio.create_task(ticker())]
         try:
@@ -625,6 +632,7 @@ class Engine:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            await dl_client.aclose()
             if dl.touched_dirs:
                 n = await asyncio.to_thread(stamp_folders, list(dl.touched_dirs), data_dir)
                 if n:
