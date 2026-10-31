@@ -356,7 +356,7 @@ When the log says Rom Sync can't reach the site but it loads in a browser, run t
 see which way of connecting fails (Rom Sync uses HTTP/2 by default):
 
 ```
-docker exec rom-sync python - <<'PY'
+docker exec -i rom-sync python - <<'PY'
 import httpx, socket, time
 url = "https://lolroms.com/"
 print("addresses:", sorted({a[4][0] for a in socket.getaddrinfo("lolroms.com", 443)}))
