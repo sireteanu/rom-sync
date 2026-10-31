@@ -5,6 +5,20 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.9] - 2026-10-30
+
+### Changed
+- **Scans wait for the site** when Rom Sync can't reach it (timeouts, server errors) instead of
+  giving up after one page: they pause, check back at growing intervals and carry on where they
+  were, re-reading the pages that failed. Settings → "When the site is down, scans wait up to"
+  (30 minutes by default; downloads keep their own, longer setting). After that the scan stops
+  without changing anything in the catalog, and a sync whose refresh gave up is skipped instead of
+  waiting again for its downloads.
+
+### Fixed
+- A full scan that was stopped or gave up no longer counts as the weekly full scan (the scheduled
+  one ran a week late), and doesn't make Clean up more cautious than the last finished scan.
+
 ## [1.4.8] - 2026-10-30
 
 ### New

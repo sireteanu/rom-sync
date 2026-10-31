@@ -69,6 +69,22 @@ def header_dirs(body: bytes, page_url: str, rules: UrlRules) -> set:
     return out
 
 
+def site_trouble(err: str) -> bool:
+    """Is this failure the site not answering (timeouts, server errors, refused connections) rather
+    than something about the page (404, not allowed)?"""
+    return err == "timed out" or err.startswith("HTTP 5") or (not err.startswith("HTTP") and "Error" in err)
+
+
+def _dur(secs: float) -> str:
+    if secs >= 3600:
+        h = secs / 3600
+        return f"{h:g} hour" + ("" if h == 1 else "s")
+    if secs >= 60:
+        m = round(secs / 60)
+        return f"{m} minute" + ("" if m == 1 else "s")
+    return f"{round(secs)} seconds"
+
+
 def url_for(base: str, path: str) -> str:
     base = base.rstrip("/") + "/"
     return base + (f"?dir={quote_plus(path)}" if path else "")
@@ -77,8 +93,18 @@ def url_for(base: str, path: str) -> str:
 class Scanner:
     def __init__(self, catalog: Catalog, base_url: str, client: httpx.AsyncClient, *,
                  workers: int = 8, delay: float = 0.1, retries: int = 2, timeout: float = 15.0,
-                 user_agent: str = "", robots: Optional[RobotFileParser] = None, folder_map=None):
+                 user_agent: str = "", robots: Optional[RobotFileParser] = None, folder_map=None,
+                 site_wait: float = 1800.0, check_every: float = 30.0):
         self.catalog = catalog
+        # the site not answering at all: wait up to site_wait seconds for it (0 = don't), asking
+        # again after check_every seconds, then twice as long each time (at most 5 minutes)
+        self.site_wait = site_wait
+        self.check_every = check_every
+        self.gave_up = False
+        self._waiting: Optional[asyncio.Task] = None
+        self._streak = 0                      # pages in a row that failed because of the site
+        self._held: list = []                 # those pages: read again when the site is back
+        self._last_err = ""
         self.folder_map = folder_map          # where files are saved (folder_map.FolderMap)
         self.base = base_url
         self.client = client
@@ -108,6 +134,43 @@ class Scanner:
 
     def stop(self):
         self.stopping = True
+
+    async def _wait_for_site(self) -> bool:
+        """The site stopped answering: wait for it (one check for all workers). False = gave up."""
+        if self._waiting is None or self._waiting.done():
+            self._waiting = asyncio.create_task(self._until_site_answers())
+        return await asyncio.shield(self._waiting)
+
+    async def _until_site_answers(self) -> bool:
+        log.warning("Rom Sync can't reach the site (%s) - the scan waits up to %s for it. If the site "
+                    "loads in your browser, see 'Rom Sync can't reach the site' in the user guide.",
+                    self._last_err or "no answer", _dur(self.site_wait))
+        t0 = time.monotonic()
+        step = self.check_every
+        while not self.stopping:
+            left = self.site_wait - (time.monotonic() - t0)
+            if left <= 0:
+                break
+            end = time.monotonic() + min(step, left)
+            while not self.stopping and time.monotonic() < end:
+                await asyncio.sleep(min(1.0, max(0.0, end - time.monotonic())))
+            if self.stopping:
+                break
+            try:
+                r = await self.client.get(self.base, timeout=self.timeout)
+                if r.status_code < 500:
+                    log.info("The site can be reached again after %s - the scan carries on",
+                             _dur(time.monotonic() - t0))
+                    self._streak = 0
+                    return True
+            except httpx.HTTPError:
+                pass
+            step = min(step * 2, 300.0)
+        if not self.stopping:
+            self.gave_up = True
+            log.error("The site still can't be reached after %s - scan stopped; nothing in the catalog "
+                      "was changed", _dur(self.site_wait))
+        return False
 
     async def _fetch(self, url: str):
         err = "unknown error"
@@ -175,10 +238,29 @@ class Scanner:
             try:
                 final, body = await self._fetch(url)
             except FetchError as e:
+                err = str(e)
+                if self.site_wait > 0 and site_trouble(err) and not self.stopping and not self.gave_up:
+                    # the first page, or several in a row, or while already waiting: the site is
+                    # probably down - wait for it, then read those pages again
+                    self._streak += 1
+                    self._held.append(url)
+                    self._last_err = err
+                    waiting = self._waiting is not None and not self._waiting.done()
+                    if url == rules.start or self._streak >= 3 or waiting:
+                        if await self._wait_for_site():
+                            held, self._held = self._held, []
+                            self.errors -= max(0, len(held) - 1)       # counted before the wait
+                            for u in held:
+                                self.queue.put_nowait(u)
+                            return
+                        if self.gave_up:
+                            return
                 self.errors += 1
-                self.catalog.page_failed(path, str(e))
+                self.catalog.page_failed(path, err)
                 log.warning("could not read %s (%s)", path or "the site root", e)
                 return
+            self._streak = 0
+            self._held.clear()
             page = rules.canonical(final) or url
             if body is None or not rules.in_scope(page):
                 return
@@ -219,7 +301,7 @@ class Scanner:
             while True:
                 url = await self.queue.get()
                 try:
-                    if not self.stopping:
+                    if not self.stopping and not self.gave_up:
                         await process(url)
                 except asyncio.CancelledError:
                     raise
@@ -237,7 +319,7 @@ class Scanner:
                 t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             self.catalog.commit()
-        status = "stopped" if self.stopping else "done"
+        status = "stopped" if self.stopping else "site down" if self.gave_up else "done"
         removed, renamed = (0, 0), {}
         if status == "done":
             removed = self.catalog.prune(scan_id, root)

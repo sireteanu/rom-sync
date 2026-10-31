@@ -262,6 +262,9 @@ class Engine:
                 continue
             if k in ("parallel_max", "sync_every_hours", "full_scan_every_days"):
                 v = max(0, int(float(v or 0)))
+            if k == "scan_wait_minutes":
+                v = max(0.0, float(v or 0))
+                v = int(v) if v == int(v) else v
             if k == "outage_wait_hours":
                 v = max(0.0, float(v or 0))
                 v = int(v) if v == int(v) else v
@@ -348,7 +351,9 @@ class Engine:
                 if kind in ("scan", "scan+sync"):
                     self.job["phase"] = "reading the site"
                     summary["scan"] = await self._scan(client, robots, root)
-                if kind in ("sync", "scan+sync") and not self.stop_requested:
+                if kind == "scan+sync" and (summary.get("scan") or {}).get("site_down"):
+                    log.error("Sync skipped: the site can't be reached. It runs again at the next sync.")
+                elif kind in ("sync", "scan+sync") and not self.stop_requested:
                     summary["sync"] = await self._sync(client, robots)
             self.job["phase"] = "stopped" if self.stop_requested else "done"
         except Exception as e:
@@ -374,20 +379,26 @@ class Engine:
         renamed: dict = {}
         started = time.time()
 
+        wait = float(self.catalog.settings().get("scan_wait_minutes", 30) or 0) * 60
+        down = False
+
         async def run(r: str, recurse: bool = True) -> dict:
+            nonlocal down
             self.scanner = Scanner(self.catalog, self.base, client, workers=self.scan_workers,
                                    delay=self.scan_delay, user_agent=USER_AGENT, robots=robots,
-                                   folder_map=self.fmap)
+                                   folder_map=self.fmap, site_wait=wait,
+                                   check_every=self.tuning.get("outage_check", 30.0))
             res = await self.scanner.run(r, recurse)
             renamed.update(res.get("renamed") or {})
+            down = down or res.get("status") == "site down"
             return res
 
         for r in (roots if roots is not None else [root]):
-            if self.stop_requested:
+            if self.stop_requested or down:
                 break
             r = renamed_path(r, renamed)            # an earlier folder in this loop found it renamed
             out[r or "/"] = await run(r)
-            if r and r not in self.scanner.read and not self.stop_requested:
+            if r and r not in self.scanner.read and not self.stop_requested and not down:
                 # couldn't read a ticked folder: the site may have renamed it to a newer set date,
                 # so read its parent's listing (just that page) to find it and move the ticks
                 last = r.rsplit("/", 1)[-1]
@@ -398,9 +409,11 @@ class Engine:
                     if new != r and not self.stop_requested:
                         out[new] = await run(new)
         for d in pages:
-            if self.stop_requested:
+            if self.stop_requested or down:
                 break
             out[d or "/"] = await run(d, recurse=False)
+        if down:
+            out["site_down"] = True
         if renamed:
             self._follow_map_renames(renamed)
         if roots is None and not root and (out.get("/") or {}).get("status") == "done":
@@ -470,9 +483,12 @@ class Engine:
                 if p is not None:
                     full, covered, pages, known = p["full"], p["covered"], p["folders"], p["known"]
             started = time.time()
-            await self._scan(client, robots, roots=full, pages=pages)
+            res = await self._scan(client, robots, roots=full, pages=pages)
             if self.stop_requested:
                 return {}
+            if res.get("site_down"):
+                log.error("Sync skipped: the site can't be reached. It runs again at the next sync.")
+                return {"skipped": "site down"}
             self.catalog.save_settings({"feed_state": sitefeed.updated_state(
                 self.catalog.settings().get("feed_state") or {}, self.catalog.selection_roots(),
                 full, started, covered, known)})
@@ -702,7 +718,7 @@ class Engine:
             if self.next_run and time.time() >= self.next_run and not self.busy:
                 s = self.catalog.settings()
                 days = float(s.get("full_scan_every_days") or 0)
-                full = self.catalog.last_scan("full")
+                full = self.catalog.last_scan("full", status="done")
                 need_full = days > 0 and (not full or time.time() - (full["finished"] or 0) > days * 86400)
                 log.info("Scheduled run: %s", "full site scan + sync" if need_full else "sync")
                 self.start("scan+sync" if need_full else "sync", scheduled=True)

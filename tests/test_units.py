@@ -222,3 +222,14 @@ def test_reading_one_page_never_forgets_its_subfolders_contents(tmp_path):
     assert cat.prune(s2, "") == (0, 0)
     assert cat.has_dir("Atari/2600")
     assert cat.files_by_rel({"Atari/2600"}) != {}
+
+
+def test_last_scan_can_ask_for_the_last_finished_one(tmp_path):
+    from lolroms_sync.catalog import Catalog
+    cat = Catalog(str(tmp_path / "catalog.db"))
+    a = cat.start_scan("full", "")
+    cat.finish_scan(a, 1, 1, "done")
+    b = cat.start_scan("full", "")
+    cat.finish_scan(b, 0, 0, "site down")
+    assert cat.last_scan("full")["status"] == "site down"
+    assert cat.last_scan("full", status="done")["id"] == a

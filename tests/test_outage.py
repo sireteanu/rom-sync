@@ -68,3 +68,53 @@ def test_waiting_can_be_stopped(site, app_factory):
     threading.Timer(0.5, lambda: c.post("/api/stop")).start()
     st = wait(c, 20)
     assert st["job"]["phase"] == "stopped" and st["sync"]["failed"] == 0
+
+
+def _log(c):
+    return " ".join(l["msg"] for l in c.get("/api/status", params={"log_since": 0}).json()["log"])
+
+
+def test_a_scan_waits_for_the_site_and_carries_on(site, app_factory):
+    c = app_factory(site)
+    site.down = 522                                         # down before the scan starts
+    assert c.post("/api/scan", json={"root": ""}).status_code == 200
+    time.sleep(6)                                           # past the page's own retries
+    assert c.get("/api/status").json()["busy"]              # waiting, not given up
+    site.down = None
+    st = wait(c)
+    assert st["catalog"]["last_full_scan"]["status"] == "done"
+    assert st["catalog"]["dirs"] >= 8
+    log = _log(c)
+    assert "can't reach the site (HTTP 522) - the scan waits up to 30 minutes" in log and "reached again" in log
+
+
+def test_a_scan_gives_up_without_changing_the_catalog(site, app_factory):
+    from conftest import kids
+    c = app_factory(site, settings={"scan_wait_minutes": 0.02})       # ~1 s
+    scan(c)
+    before = kids(c, "Atari")
+    site.down = 522
+    st = scan(c)
+    assert st["catalog"]["last_full_scan"]["status"] == "site down"
+    assert kids(c, "Atari") == before                                 # nothing forgotten
+    assert "still can't be reached after" in _log(c)
+
+
+def test_a_sync_is_skipped_when_its_refresh_gives_up(site, app_factory):
+    c = app_factory(site, settings={"scan_wait_minutes": 0.02})
+    scan(c)
+    select(c, "Atari")
+    site.down = 522
+    site.reset_log()
+    sync(c)
+    assert site.file_requests() == []
+    assert "Sync skipped: the site can't be reached" in _log(c)
+    site.down = None
+    sync(c)
+    assert on_disk(c.data) == EXPECTED_ATARI
+
+
+def test_site_trouble_tells_outages_from_page_errors():
+    from lolroms_sync.scanner import site_trouble
+    assert site_trouble("timed out") and site_trouble("HTTP 522") and site_trouble("ConnectError: refused")
+    assert not site_trouble("HTTP 404") and not site_trouble("HTTP 429")

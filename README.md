@@ -349,6 +349,29 @@ folder including `.dir_crawler.db` to avoid downloading again (files are adopted
 
 ---
 
+
+### Rom Sync can't reach the site
+
+When the log says Rom Sync can't reach the site but it loads in a browser, run this on the server to
+see which way of connecting fails (Rom Sync uses HTTP/2 by default):
+
+```
+docker exec rom-sync python - <<'PY'
+import httpx, socket, time
+url = "https://lolroms.com/"
+print("addresses:", sorted({a[4][0] for a in socket.getaddrinfo("lolroms.com", 443)}))
+for name, kw in (("HTTP/2", {"http2": True}), ("HTTP/1.1", {"http2": False}),
+                 ("HTTP/1.1, IPv4 only", {"http2": False, "transport": httpx.HTTPTransport(local_address="0.0.0.0")})):
+    t = time.time()
+    try:
+        with httpx.Client(timeout=20, **kw) as c:
+            r = c.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; lolroms-sync/check)"})
+        print(f"{name:22} HTTP {r.status_code} {r.http_version} in {time.time() - t:.1f}s")
+    except Exception as e:
+        print(f"{name:22} FAILED after {time.time() - t:.1f}s: {type(e).__name__} {e}")
+PY
+```
+
 ## HTTP API
 
 All JSON; the page uses nothing else.

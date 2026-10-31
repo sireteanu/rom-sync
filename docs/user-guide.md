@@ -255,5 +255,11 @@ the old one. The log's first lines say which catalog it uses and warn if the dow
 already has files. Check that the container's `/config` mapping points at the folder with your
 old `catalog.db` (your ticks are stored there), then Compose Up again.
 
+**Rom Sync can't reach the site, but it loads in your browser.** Rom Sync waits (Settings → "scans
+wait up to") and carries on by itself once it gets through. If it never does while the site works
+in your browser, the problem is between your server and the site, not the site itself. Open a
+terminal on the server and run the check in README.md ("Rom Sync can't reach the site"), and send
+the result along with the log.
+
 **Something else?** The log (right side, and `rom-sync.log` in the config folder) says what went
 wrong. Open an issue on GitHub with the relevant log lines.

@@ -32,6 +32,7 @@ DEFAULT_SETTINGS = {
     "interrupted_job": "",          # set while a sync runs; cleared when it ends normally
     "check_remote": False,
     "outage_wait_hours": 12,         # how long a sync waits for the site when it's down
+    "scan_wait_minutes": 30,         # how long a scan (or a sync's refresh) waits for it
     "sync_every_hours": 0,          # 0 = off
     "full_scan_every_days": 7,      # 0 = off (only when sync schedule is on, or on its own)
     "data_dir": "",                 # set at start-up from --data unless changed in the UI
@@ -205,12 +206,21 @@ class Catalog:
             self.db.commit()
         self.invalidate()
 
-    def last_scan(self, kind: Optional[str] = None):
+    def last_scan(self, kind: Optional[str] = None, status: Optional[str] = None):
+        """The latest scan (of that kind; with that status, e.g. "done" for the last one that
+        finished - not stopped, nor given up because the site was down)."""
         q = "SELECT id, kind, root, started, finished, pages, files, status FROM scans"
-        q += " WHERE kind=?" if kind else ""
+        where, args = [], []
+        if kind:
+            where.append("kind=?")
+            args.append(kind)
+        if status:
+            where.append("status=?")
+            args.append(status)
+        q += (" WHERE " + " AND ".join(where)) if where else ""
         q += " ORDER BY id DESC LIMIT 1"
         with self.lock:
-            row = self.db.execute(q, (kind,) if kind else ()).fetchone()
+            row = self.db.execute(q, args).fetchone()
         if not row:
             return None
         return dict(zip(("id", "kind", "root", "started", "finished", "pages", "files", "status"), row))

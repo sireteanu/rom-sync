@@ -699,6 +699,7 @@ $("#btn-settings").addEventListener("click", async () => {
   form.use_feed.checked = s.use_feed !== false;
   form.check_remote.checked = !!s.check_remote;
   form.outage_wait_hours.value = s.outage_wait_hours ?? 12;
+  form.scan_wait_minutes.value = s.scan_wait_minutes ?? 30;
   form.resume_interrupted.checked = s.resume_interrupted !== false;
   $("#settings-error").hidden = true;
   syncTypeFields();
@@ -720,6 +721,7 @@ $("#settings-save").addEventListener("click", async (e) => {
     use_feed: form.use_feed.checked,
     check_remote: form.check_remote.checked,
     outage_wait_hours: form.outage_wait_hours.value || 0,
+    scan_wait_minutes: form.scan_wait_minutes.value || 0,
     resume_interrupted: form.resume_interrupted.checked,
   };
   if (auto) body.parallel_max = form.parallel_n.value || 16;

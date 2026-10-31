@@ -65,7 +65,7 @@ def find(catalog, types, disk: list, folder_map: Optional[FolderMap] = None) -> 
     """Judge the files found on disk -> [{path, size, reason}] (on the event loop thread)."""
     tree = catalog.tree(types)
     rules = catalog.rules()
-    full = catalog.last_scan("full")
+    full = catalog.last_scan("full", status="done")
     full_done = bool(full and full.get("status") == "done")
     fmap = folder_map or FolderMap()
     by_disk: dict = {}                                   # folder on disk -> catalog folders saved there
