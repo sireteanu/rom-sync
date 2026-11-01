@@ -5,6 +5,16 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.11] - 2026-11-01
+
+### New
+- **Check folder** (button at the top): reads the download folder and corrects what Rom Sync counts
+  as synced, for when you change files yourself. Files you deleted or that were cut short stop
+  counting (ticked ones are downloaded again at the next sync) and show in the Activity log;
+  games you copied in count as synced if their size matches the website's. It doesn't contact the
+  website, and downloads, moves and deletes nothing. If the folder looks empty or unreadable (an
+  unmounted share), it changes nothing and says so.
+
 ## [1.4.10] - 2026-10-30
 
 ### Improved

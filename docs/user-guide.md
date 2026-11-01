@@ -9,6 +9,7 @@ to date. For the technical reference, see the [README](../README.md).
 - [4. Sync](#4-sync)
 - [5. Watching progress](#5-watching-progress)
 - [6. Clean up files you no longer sync](#6-clean-up-files-you-no-longer-sync)
+  - [Check the folder after changing files yourself](#check-the-folder-after-changing-files-yourself)
 - [7. Settings](#7-settings)
 - [8. Keep it up to date automatically](#8-keep-it-up-to-date-automatically)
 - [9. Restart, shut down and update](#9-restart-shut-down-and-update)
@@ -186,6 +187,26 @@ later, its files are downloaded again.
 Rom Sync only lists files it can be sure about: folders it couldn't read (red in the tree), folders
 it hasn't read yet, hidden files and folder links are never listed. Deleting isn't possible while a
 scan or sync is running.
+
+### Check the folder after changing files yourself
+
+If you delete, move or copy games in the download folder yourself (in Unraid, a file manager, over
+the network), Rom Sync doesn't notice until you tell it. Click **Check folder** at the top. Rom Sync
+reads the download folder - it doesn't contact the website, and it downloads and deletes nothing -
+and then:
+
+- files you **deleted** stop counting as synced, and show in the **Activity log** as deleted. If
+  their folder is ticked, the next **Sync selected** downloads them again (untick it if you don't
+  want them back);
+- files that are **cut short** or a different size stop counting as synced; the next sync finishes
+  or replaces them;
+- games you **copied in** count as synced, if their size matches the website's, so they aren't
+  downloaded again;
+- the Clean up summary is refreshed too.
+
+The Activity panel then says what it found, for example *"1,204 of 1,210 catalog files are in the
+download folder; 6 synced files are missing"*. If the download folder looks empty or can't be read
+(for example the share isn't mounted), Rom Sync changes nothing and tells you to check the folder.
 
 ## 7. Settings
 

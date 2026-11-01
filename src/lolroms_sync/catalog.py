@@ -364,6 +364,24 @@ class Catalog:
                     out[rel] = (url, d, ext)
         return out
 
+    def local_states(self) -> list:
+        """[(url, rel, date, size, local, local_size)] for every file in the catalog (Check folder)."""
+        with self.lock:
+            return list(self.db.execute("SELECT url, rel, date, size, local, local_size FROM files"))
+
+    def set_local_many(self, found: Iterable, lost: Iterable[str]) -> None:
+        """Check folder: found = [(url, word, size)] now on disk, lost = urls no longer there
+        (or no longer matching), which count as not synced until a sync fetches them again."""
+        now = time.time()
+        with self.lock:
+            self.db.executemany("UPDATE files SET local=?, local_size=?, synced=?, error=NULL WHERE url=?",
+                                [(w, s, now, u) for u, w, s in found])
+            self.db.executemany("UPDATE files SET local=NULL, local_size=NULL, synced=NULL WHERE url=?",
+                                [(u,) for u in lost])
+            self.db.commit()
+        self.dirty = True
+        self.invalidate()
+
     def forget_local(self, urls: Iterable[str]) -> None:
         """These files were deleted from the download folder."""
         with self.lock:

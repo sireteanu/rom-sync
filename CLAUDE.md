@@ -27,6 +27,7 @@ src/lolroms_sync/            the web app
                 tree() = folders with recursive totals (cached; invalidate() on structural change)
   scanner.py    reads listing pages (never files) into the catalog; prunes what the site dropped
   cleanup.py    Clean up: walk the download folder, judge files (gone / part / unticked), delete
+  folder_check.py  Check folder: compare the download folder with the catalog's synced state
   static/       index.html, app.css, app.js - no build step, no CDN (works offline on a LAN)
   core/         the sync engine
     download.py Downloader: plan() + download(); run_item() = one worker step (pushed-back files
@@ -35,7 +36,7 @@ src/lolroms_sync/            the web app
     extract.py  LinkExtractor incl. per-file date/size from the listing row
     limits.py   Limiter (page pacing), DownloadGate (auto parallel downloads), RateLimit
     urls.py / util.py / constants.py / config.py   helpers
-tests/  conftest (app_factory + API helpers), test_app, test_engine, test_cleanup, test_changes, test_outage, test_units
+tests/  conftest (app_factory + API helpers), test_app, test_engine, test_cleanup, test_check, test_changes, test_outage, test_units
 docker/entrypoint.sh, Dockerfile (deps in their own layer), docker-compose.yml, unraid/, .github/workflows/
 start.bat, run.py   launchers (`run` name so it never shadows the package)
 ```
@@ -87,7 +88,12 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
 - **Change history** (`changes` table, `Catalog.add_change`): a sync records new/updated/resumed/failed
   per file (job = the sync's start time), Clean up records deleted; pruned after 365 days. Activity
   counters open `/api/sync/files?kind=`, the header's Activity log uses `/api/changes/days` + `?day=`.
-- Header: Scan / Sync / Stop / Activity log, then one menu (☰, `#btn-menu`) with
+- **Check folder** (job `check`, `POST /api/check`, `folder_check.py`): one walk of the download folder,
+  no network; corrects `files.local` (missing / different size -> NULL + `deleted` change; found ->
+  `up to date` / `already in folder`). Read-only on disk: never creates the manifest, never touches
+  dates or permissions. Refuses to change anything when the folder is empty but files were synced
+  (unmounted share).
+- Header: Scan / Check folder / Sync / Stop / Activity log, then one menu (☰, `#btn-menu`) with
   Settings, theme, Restart, Shut down.
 - Slow disk work stays off the event loop: sync planning (`plan_all()` via `asyncio.to_thread`;
   Manifest uses `check_same_thread=False`, safe because downloads start only after planning) and the

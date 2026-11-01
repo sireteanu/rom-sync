@@ -473,10 +473,11 @@ function renderStatus(st) {
   const syncing = st.sync && job && job.phase === "downloading" && busy && !st.sync.outage;
   const outage = busy && st.sync && st.sync.outage;
   pill.className = "pill " + (outage ? "warn" : busy ? "busy" : st.sync && st.sync.paused ? "warn" : "idle");
-  pill.textContent = outage ? "Waiting for site" : busy ? (job.kind === "scan" ? "Scanning" : "Syncing") :
+  pill.textContent = outage ? "Waiting for site" : busy ? ({ scan: "Scanning", check: "Checking" }[job.kind] || "Syncing") :
     (st.sync && st.sync.paused ? "Paused" : "Idle");
   renderOutage(outage);
   $("#btn-scan").disabled = busy;
+  $("#btn-check").disabled = busy;
   $("#btn-sync").disabled = busy || !st.selection.dirs;
   $("#btn-sync").title = st.selection.dirs ? "Download new, incomplete and changed files in the ticked folders"
     : "Tick the folders you want first";
@@ -502,7 +503,7 @@ function renderStatus(st) {
   // job
   const line = $("#job-line");
   if (job) {
-    const what = { scan: "Scan", sync: "Sync", "scan+sync": "Scan and sync" }[job.kind] || job.kind;
+    const what = { scan: "Scan", sync: "Sync", "scan+sync": "Scan and sync", check: "Folder check" }[job.kind] || job.kind;
     line.textContent = busy
       ? `${what}: ${outage ? "waiting for lolroms.com" : job.phase}${job.root ? " (" + job.root + ")" : ""} - started ${clock(job.started)}`
       : `Last ${what.toLowerCase()} ${job.phase === "done" ? "finished" : job.phase} at ${clock(job.finished || job.started)}`
@@ -660,6 +661,7 @@ async function startJob(path, body) {
 $("#btn-scan").addEventListener("click", () => startJob("/api/scan", { root: "" }));
 $("#btn-scan-empty").addEventListener("click", () => startJob("/api/scan", { root: "" }));
 $("#btn-sync").addEventListener("click", () => startJob("/api/sync"));
+$("#btn-check").addEventListener("click", () => startJob("/api/check"));
 $("#btn-stop").addEventListener("click", () => startJob("/api/stop"));
 $("#btn-clear-sel").addEventListener("click", async () => {
   if (!confirm("Untick every folder? Files already downloaded stay where they are.")) return;

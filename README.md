@@ -51,6 +51,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 | Daily limit | If lolroms starts sending its "download limit" web page instead of files, downloads pause and continue at the next sync. |
 | Progress | Activity panel (counts, speed, parallel downloads - click New, Updated, Resumed, Up to date or Failed to see those files), **This sync** box (total size, files left, time remaining), **Downloading** box (one progress bar per file), live log. |
 | Activity log | **Activity log** (header) lists every file added, updated, resumed, deleted or failed, grouped by day, kept for a year. |
+| Check folder | **Check folder** (header) reads the download folder and corrects what counts as synced: files deleted or cut short by hand stop counting (ticked ones come back at the next sync), files copied in by hand count. No network, nothing downloaded or deleted. |
 | Clean up | After each sync, lists the files in the download folder that aren't part of the sync any more (removed from the site, in folders you unticked, unneeded `.part` files). **Clean up** shows them grouped; you tick what goes and confirm before anything is deleted. |
 | Schedule | Optional automatic sync every N hours and a full site scan every N days. |
 | Reliability | A sync cut off by a restart, crash or reboot continues by itself at the next start. Power menu: **Restart** / **Shut down**. Starting a second copy just opens the running one. |
@@ -258,10 +259,29 @@ dialog opens, Rom Sync walks the download folder and judges each file against th
   the download folder itself), the manifest forgets the files, and the catalog stops counting them
   as synced, so ticking them again downloads them again.
 
+### Check folder
+
+`folder_check.py`, `Engine._check_folder()`, job kind `check` (`POST /api/check`; one job at a time,
+Stop works). For when files change on disk without Rom Sync (deleted, moved, copied in, cut short):
+
+- Walks the download folder once (`cleanup.walk`; no request to the site) and compares every catalog
+  file's saved path with it. The manifest is only read (and not created if missing).
+- **Missing**: counted as synced but not on disk -> no longer synced, recorded as `deleted` ("no
+  longer in the download folder") in the Activity log; ticked ones download at the next sync.
+- **Different size**: not the size Rom Sync saved (or, for files it didn't download, not the listing
+  size) -> no longer synced; the next sync resumes or replaces it.
+- **Found**: on disk with a fitting size but not counted -> `up to date` (in the manifest) or
+  `already in folder`. Dates, permissions and the manifest are left to the next sync (`plan()`).
+- Then the Clean up check runs, so the Activity panel's leftover summary is current too.
+- If the folder is empty or unreadable while the catalog has synced files (an unmounted share or a
+  wrong volume mapping), nothing is changed and the job says so.
+- The result is the job's `message` (shown in the Activity panel) and a log line listing up to 20
+  missing and changed files.
+
 ### Interface
 
-- Header: title with **version** (links to its release notes), job pill, **Scan site**, **Sync
-  selected**, **Stop**, **Activity log**, and a menu button (☰) holding **Settings**,
+- Header: title with **version** (links to its release notes), job pill, **Scan site**, **Check
+  folder**, **Sync selected**, **Stop**, **Activity log**, and a menu button (☰) holding **Settings**,
   **Light/Dark theme**, **Restart** and **Shut down**.
 - The Activity counters New / Updated / Resumed / Up to date / Failed are buttons: each opens the
   files behind it for the current or last sync (`GET /api/sync/files`). "Up to date" comes from the
@@ -388,6 +408,7 @@ All JSON; the page uses nothing else.
 | `POST /api/select` `{path, include}` | Tick/untick a folder; `path` `"<folder>/."` = its own files only |
 | `POST /api/selection/clear` | Untick everything |
 | `POST /api/scan` `{root}` · `POST /api/sync` · `POST /api/stop` | Jobs (409 when busy) |
+| `POST /api/check` | Check folder: re-read the download folder and correct what counts as synced (409 when busy) |
 | `GET/POST /api/settings` | Read / change settings (400 with a message on invalid values) |
 | `POST /api/folder-place` `{path, place}` | Saved as: where this folder goes (`""` = as on the site) -> `{path, place, moved}`; 400 on a bad place, 409 while busy |
 | `GET /api/history` | Last jobs |
@@ -413,6 +434,7 @@ src/lolroms_sync/            the web app
                 (effective / effective_files / state_of / select / _fold)
   scanner.py    reads listing pages into the catalog; header_dirs() for header-only sections; prune
   cleanup.py    Clean up: walk the download folder, judge files (gone/part/unticked), delete confirmed ones
+  folder_check.py  Check folder: compare the download folder with what the catalog counts as synced
   renamed.py    move files of folders the site renamed (old dated name -> new name) before a sync
   feed.py       the site's list of recent changes: which ticked folders a sync must re-read
   folder_map.py Saved as: where each site folder (and its subfolders) goes on disk
@@ -425,7 +447,7 @@ src/lolroms_sync/            the web app
     urls.py / config.py / constants.py / util.py
 tests/          pytest against tests/mock_site.py (a local copy of lolroms' markup); never the real site
                 test_app (API, selection, settings), test_engine (downloading, resume,
-                updates, dates, parallel downloads, listing parsing), test_cleanup, test_changes, test_outage, test_units
+                updates, dates, parallel downloads, listing parsing), test_cleanup, test_check, test_changes, test_outage, test_units
 docker/         entrypoint.sh (PUID/PGID/UMASK), unraid-update.sh
 unraid/         docker-compose.yml (Compose Manager), lolroms-sync.xml (Docker-tab template)
 .github/workflows/  tests.yml (pytest + pyflakes on every push, Python 3.9 and 3.12),

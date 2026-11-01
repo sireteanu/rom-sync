@@ -22,7 +22,7 @@ from .core.sync import MANIFEST_NAME, FileInfo, Manifest, size_range, stamp_fold
 from .core.util import fmt_bytes, parse_size, safe_segment
 
 from . import __version__
-from .catalog import Catalog, SET_DATE, parent_of, renamed_path
+from .catalog import Catalog, SET_DATE, SYNCED_WORDS, parent_of, renamed_path
 from .core.urls import UrlRules
 from .folder_map import FolderMap, clean_place, from_old_settings
 from .renamed import merge_renamed_folders
@@ -302,7 +302,7 @@ class Engine:
             # crash, reboot or app restart carries on (and resumes its .part files) at next start
             self.catalog.save_settings({"interrupted_job": kind})
         what = {"scan": "site scan" if not root else f"scan of {root}", "sync": "sync",
-                "scan+sync": "site scan + sync"}.get(kind, kind)
+                "scan+sync": "site scan + sync", "check": "check of the download folder"}.get(kind, kind)
         log.info("Starting %s (%s)", what, "scheduled" if scheduled else "requested")
         self.task = asyncio.create_task(self._run(kind, root))
         return True
@@ -352,15 +352,18 @@ class Engine:
         started = time.time()
         summary: dict = {}
         try:
-            async with self._client() as client:
-                robots = await self._robots(client)
-                if kind in ("scan", "scan+sync"):
-                    self.job["phase"] = "reading the site"
-                    summary["scan"] = await self._scan(client, robots, root)
-                if kind == "scan+sync" and (summary.get("scan") or {}).get("site_down"):
-                    log.error("Sync skipped: the site can't be reached. It runs again at the next sync.")
-                elif kind in ("sync", "scan+sync") and not self.stop_requested:
-                    summary["sync"] = await self._sync(client, robots)
+            if kind == "check":                  # the download folder only: no network
+                summary["check"] = await self._check_folder()
+            else:
+                async with self._client() as client:
+                    robots = await self._robots(client)
+                    if kind in ("scan", "scan+sync"):
+                        self.job["phase"] = "reading the site"
+                        summary["scan"] = await self._scan(client, robots, root)
+                    if kind == "scan+sync" and (summary.get("scan") or {}).get("site_down"):
+                        log.error("Sync skipped: the site can't be reached. It runs again at the next sync.")
+                    elif kind in ("sync", "scan+sync") and not self.stop_requested:
+                        summary["sync"] = await self._sync(client, robots)
             self.job["phase"] = "stopped" if self.stop_requested else "done"
         except Exception as e:
             log.exception("job failed: %r", e)
@@ -655,6 +658,58 @@ class Engine:
                  st["new"], st["updated"], st["resumed"], st["failed"], fmt_bytes(dl.bytes),
                  f" - paused: {dl.paused}" if dl.paused else "")
         return summary
+
+    # ------------------------------------------------------------------ check folder
+    async def _check_folder(self) -> dict:
+        """Read the download folder and correct what the catalog counts as synced (see
+        folder_check.py). Nothing is downloaded, moved or deleted."""
+        from . import cleanup, folder_check
+        data_dir = self.catalog.settings()["data_dir"]
+        self.job["phase"] = "reading the download folder"
+        disk_files = await asyncio.to_thread(cleanup.walk, data_dir)
+        if self.stop_requested:
+            return {}
+        disk = {f"{d}/{n}" if d else n: size for d, n, size in disk_files}
+        self.job["phase"] = f"comparing {len(disk):,} files with the catalog"
+        states = self.catalog.local_states()
+        if not disk and any(r[4] in SYNCED_WORDS for r in states):
+            # an unmounted share or a wrong mapping looks exactly like "everything was deleted"
+            msg = (f"The download folder {data_dir} is empty or can't be read, but files were synced "
+                   "to it before. Nothing was changed - check that the folder is there (in Docker: the "
+                   "volume mapping), then check again.")
+            log.error("Folder check: %s", msg)
+            self.job["message"] = msg
+            return {"error": "download folder empty or unreadable"}
+
+        def run():
+            if not os.path.exists(os.path.join(data_dir, MANIFEST_NAME)):   # only read, never create it
+                return folder_check.compare(states, disk, lambda rel: None)
+            manifest = Manifest(data_dir)
+            try:
+                return folder_check.compare(states, disk, manifest.get)
+            finally:
+                manifest.close()
+        res = await asyncio.to_thread(run)
+        if self.stop_requested:
+            return {}
+        self.catalog.set_local_many(res["found"], res["lost"])
+        job_id = self.job["started"]
+        for rel in res["missing"]:
+            self.catalog.add_change(job_id, "deleted", rel, None, "no longer in the download folder")
+        self.catalog.commit()
+        c = res["counts"]
+        text = folder_check.describe(c)
+        log.info("Folder check: %s", text)
+        for rel in res["missing"][:20]:
+            log.info("missing  %s", rel)
+        if len(res["missing"]) > 20:
+            log.info("... and %d more missing files (see Activity log)", len(res["missing"]) - 20)
+        for rel in res["changed"][:20]:
+            log.info("changed  %s", rel)
+        self.job["message"] = text
+        self.job["phase"] = "checking for leftover files"
+        await self._check_leftovers()
+        return dict(c, files_on_disk=len(disk))
 
     # ------------------------------------------------------------------ clean up
     async def find_leftovers(self) -> list:

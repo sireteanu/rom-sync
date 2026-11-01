@@ -168,6 +168,13 @@ def create_app(engine_factory, password: Optional[str] = None, on_restart=None, 
             raise HTTPException(409, "already busy")
         return {"ok": True}
 
+    @app.post("/api/check")
+    async def check_folder():
+        """Read the download folder and correct what counts as synced (no network, no deletes)."""
+        if not eng().start("check"):
+            raise HTTPException(409, "already busy")
+        return {"ok": True}
+
     @app.post("/api/stop")
     async def stop():
         eng().stop()
