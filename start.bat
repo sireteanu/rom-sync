@@ -23,7 +23,7 @@ goto :eof
 
 :nopython
 echo.
-echo Python 3.9 or newer is needed: https://www.python.org/downloads/
+echo Python 3.10 or newer is needed: https://www.python.org/downloads/
 echo (tick "Add python.exe to PATH" during installation), then run start.bat again.
 pause
 goto :eof

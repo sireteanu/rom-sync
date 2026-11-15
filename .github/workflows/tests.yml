@@ -8,13 +8,13 @@ on:
 
 jobs:
   test:
-    # ubuntu-latest moved to Ubuntu 26.04 (November 2026), which has no Python 3.9 builds;
-    # 24.04 still has both versions the app supports
+    # pinned: ubuntu-latest (Ubuntu 26.04 since November 2026) lacks older Python builds.
+    # Tests run on the oldest Python Rom Sync supports and the one its Docker image uses.
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.9", "3.12"]
+        python: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -4,14 +4,14 @@ Web app for keeping local copies of lolroms.com folders in sync. `lolroms_sync` 
 site into a catalog, shows a folder tree with tri-state ticks, syncs the ticked folders, cleans up
 files that aren't part of the sync (the RomM Mapper moved to sireteanu/rom-mapper in 1.3.5). `lolroms_sync.core` is the sync
 engine (forked from lolroms-downloader v3.2; its command-line tool was removed in 1.3.0).
-Python 3.9+, async (httpx), FastAPI.
+Python 3.10+, async (httpx), FastAPI.
 It runs on **Windows** (`start.bat`) and in **Docker on Unraid** -
 keep both working: Windows paths and console, and PUID/PGID/UMASK plus `/config` and `/data` in Docker.
 
 ## Commands
 - Install (dev): `pip install -e ".[dev]"`
 - Tests: `python -m pytest` (~90 s; all traffic goes to the in-process `tests/mock_site.py`);
-  the `Tests` workflow runs them and pyflakes on every push (Python 3.9 and 3.12)
+  the `Tests` workflow runs them and pyflakes on every push (Python 3.10 and 3.12)
 - Lint: `python -m pyflakes src tests`
 - Web app: `python run.py [--data DIR] [--port 8484] [--host 0.0.0.0] [--password X]`
   (Windows users: `start.bat`; installed: `lolroms-sync`)

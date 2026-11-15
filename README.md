@@ -106,7 +106,7 @@ when started by hand).
 
 ### Windows
 
-1. Install Python 3.9+ (tick "Add python.exe to PATH").
+1. Install Python 3.10+ (tick "Add python.exe to PATH").
 2. Double-click **`start.bat`**. The first start creates `.venv` and installs the dependencies; the
    browser then opens `http://localhost:8484/`.
 3. Set the download folder in Settings, or start with `start.bat --data D:\path\to\roms`.
@@ -456,7 +456,7 @@ tests/          pytest against tests/mock_site.py (a local copy of lolroms' mark
                 updates, dates, parallel downloads, listing parsing), test_cleanup, test_check, test_changes, test_outage, test_units
 docker/         entrypoint.sh (PUID/PGID/UMASK), unraid-update.sh
 unraid/         docker-compose.yml (Compose Manager), lolroms-sync.xml (Docker-tab template)
-.github/workflows/  tests.yml (pytest + pyflakes on every push, Python 3.9 and 3.12),
+.github/workflows/  tests.yml (pytest + pyflakes on every push, Python 3.10 and 3.12),
                 release.yml (GitHub release per version), docker.yml (registry image, manual)
 Dockerfile      installs the dependencies in their own layer (rebuilt only when they change)
 start.bat, run.py, publish.bat   launchers / helpers

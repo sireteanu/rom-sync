@@ -5,6 +5,12 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.13] - 2026-11-15
+
+### Changed
+- **Python 3.10 or newer is needed** to run Rom Sync on Windows (3.9 is no longer supported by
+  Python itself). The Docker image already uses Python 3.12, so nothing changes there.
+
 ## [1.4.12] - 2026-11-15
 
 ### Fixed
