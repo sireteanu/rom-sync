@@ -8,7 +8,9 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # ubuntu-latest moved to Ubuntu 26.04 (November 2026), which has no Python 3.9 builds;
+    # 24.04 still has both versions the app supports
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
