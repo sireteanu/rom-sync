@@ -4,6 +4,7 @@ import os
 import shutil
 import threading
 import time
+import urllib.parse
 
 from conftest import file_status, on_disk, scan, select, sync, wait
 from mock_site import content
@@ -41,7 +42,7 @@ def first(site, c):
 
 
 def fetched(site):
-    return sorted({p.split("file=")[1] for p, _ in site.file_requests()})
+    return sorted({urllib.parse.unquote(p).lstrip("/") for p, _ in site.file_requests()})
 
 
 def local_day(path):
@@ -68,7 +69,7 @@ def test_downloads_archives_into_mirrored_folders(site, app_factory):
     big = next(f for f in c.get("/api/files", params={"path": "Atari/5200"}).json()["files"]
                if f["name"] == "Big.7z")
     assert big["date"] == "2025-11-17" and big["local"] == "new"
-    assert not any("file=Acorn" in p or "file=Arcade" in p for p in site.paths())
+    assert not any(p.startswith(("/Acorn/", "/Arcade/")) for p, _ in site.file_requests())
 
 
 def test_rejects_web_page_served_instead_of_file(site_factory, app_factory):
@@ -130,14 +131,15 @@ def test_changed_file_on_site_is_updated(site, app_factory):
     first(site, c)
     site.modify(ADV, "2026-01-05")                       # new date, same size
     sync(c)                                              # re-reads the ticked listings first
-    assert fetched(site) == ["Atari%2F2600%2FAdventure+%28USA%29.7z"]
+    assert fetched(site) == ["Atari/2600/Adventure (USA).7z"]
     assert (c.data / ADV).read_bytes() == site.content(ADV)
     st = all_status(c)
     assert st[ADV] == "updated"
     assert sum(1 for v in st.values() if v == "up to date") == 6
 
 
-def test_size_change_with_same_date_is_updated(site, app_factory):
+def test_size_change_with_same_date_is_updated(site_factory, app_factory):
+    site = site_factory("sizes")                         # only visible when the listing shows sizes
     c = app_factory(site)
     first(site, c)
     site.modify(ADV, "2025-11-17", grow=5000)            # same day, different size
@@ -348,8 +350,16 @@ def listed(c, folder="Atari/5200"):
     return {f["name"]: f for f in c.get("/api/files", params={"path": folder}).json()["files"]}
 
 
-def test_reads_dates_and_sizes_from_lolroms_rows(site, app_factory):
+def test_reads_dates_from_lolroms_rows(site, app_factory):
     c = app_factory(site)
+    scan(c, "Atari")
+    big = listed(c)["Big.7z"]
+    assert big["date"] == "2025-11-17" and big["size"] is None       # no sizes since November 2026
+    assert all(f["date"] for f in listed(c, "Atari/2600").values())
+
+
+def test_reads_dates_and_sizes_from_lolroms_rows_with_sizes(site_factory, app_factory):
+    c = app_factory(site_factory("sizes"))
     scan(c, "Atari")
     big = listed(c)["Big.7z"]
     assert big["date"] == "2025-11-17" and big["size"] == "2.86 MB"
@@ -357,7 +367,7 @@ def test_reads_dates_and_sizes_from_lolroms_rows(site, app_factory):
 
 
 def test_reads_dates_and_sizes_from_table_layouts_too(site_factory, app_factory):
-    c = app_factory(site_factory("tables"))
+    c = app_factory(site_factory("tables,sizes"))
     scan(c, "Atari")
     rows = listed(c, "Atari/2600").values()
     assert rows and all(f["date"] == "2025-11-17" and f["size"] for f in rows)
@@ -368,8 +378,8 @@ def test_folder_scan_stays_in_scope_and_never_fetches_files(site, app_factory):
     scan(c, "Atari")
     paths = site.paths()
     assert not site.file_requests(), "file links are never requested while reading listings"
-    assert not [p for p in paths if "dir=" in p and "Atari" not in p], "must not leave Atari"
-    pages = [p for p in paths if "dir=" in p]
+    pages = site.listing_reads()
+    assert pages and not [p for p in pages if not p.startswith("Atari")], "must not leave Atari"
     assert len(pages) == len(set(pages)) and not [p for p in paths if "sort=" in p]
 
 
@@ -710,7 +720,11 @@ def test_minus_date_names_become_plain_when_the_site_drops_the_date(site_factory
 
 def test_a_page_showing_another_folder_counts_as_missing():
     from lolroms_sync.scanner import shown_dir
-    assert shown_dir(b'<a href="?dir=Acorn&amp;sort=name">Name</a>') == "Acorn"
-    assert shown_dir(b'<a href="https://lolroms.com/?dir=Acorn%2FRisc+PC+%28Flux%29&sort=date">D</a>') == "Acorn/Risc PC (Flux)"
-    assert shown_dir(b'<a href="?dir=&amp;sort=size">S</a>') == ""
-    assert shown_dir(b"<p>no sort bar</p>") is None
+    # the breadcrumb names the folder shown; the root listing has none
+    assert shown_dir(b'<div class="path"><a href="/">Home</a> / <a href="/Acorn">Acorn</a></div>'
+                     b'<div class="list"></div>') == "Acorn"
+    assert shown_dir(b'<div class="path"><a href="/">Home</a> / <a href="/Acorn">Acorn</a> / '
+                     b'<a href="/Acorn/Risc%20PC%20%28Flux%29">Risc PC (Flux)</a></div>') == "Acorn/Risc PC (Flux)"
+    assert shown_dir(b'<div class="container"><div class="list"><div class="row">'
+                     b'<a href="/Acorn">Acorn</a></div></div></div>') == ""
+    assert shown_dir(b"<p>no listing</p>") is None

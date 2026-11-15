@@ -116,6 +116,14 @@ Rom Sync notices at the next scan or sync: your ticks and Saved as move to the n
 it already downloaded are moved into the new folder instead of being downloaded again. Run a sync
 before using Clean up after such a change, so files still in an old folder are moved first.
 
+**When the site gives a folder a different name** (in November 2026, for example,
+*Nintendo/Super Famicom* became *Nintendo/Super Nintendo Entertainment System*, *Audio [FLAC]*
+became *FLAC* and *fixdats* moved into *DATs*), Rom Sync can't tell it apart from a folder that was
+removed. After a scan the log names every ticked folder that isn't on the site any more. For each
+one, tick the new folder and give it the same **Saved as** place as the old one: its files are then
+recognised and nothing is downloaded again. Until you do, Clean up lists those files under
+**No longer on the site** - untick them there instead of deleting them.
+
 Many folders on lolroms carried the date of their set, like *Archimedes (20231029-220453)*. Hover over
 the row and click **−date** to save it as just *Archimedes*. When the site later moves the folder to a
 newer date, your ticks and where you save it go along with it, and only new or changed files are

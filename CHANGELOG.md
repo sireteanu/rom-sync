@@ -5,6 +5,31 @@ release. Newest first.
 
 ## [Unreleased]
 
+## [1.4.12] - 2026-11-15
+
+### Fixed
+- **Works with lolroms.com's new links again.** The site now addresses folders and files by plain
+  paths (`lolroms.com/Nintendo/Virtual%20Boy`) instead of `?dir=` / `?file=` links, and answers the
+  old links with its home page, so scans found nothing and downloads would have failed. Rom Sync
+  reads the new links, and your catalog is updated to them when Rom Sync starts: ticks, Saved as
+  places and what's already downloaded stay as they are, and nothing is downloaded again.
+
+### Changed
+- **The website no longer lists file sizes**, only dates. Rom Sync still spots changed files by
+  their date. Folder sizes now come from what you've downloaded (folders with nothing downloaded
+  show 0), and the "This sync" box can't estimate the total size or time left of new files.
+- **Files you copied into the download folder yourself** are checked against the size the website
+  gives for each one (a quick question to the site, nothing downloaded) before they count as
+  synced. A copy that was cut short is resumed, one with a different size is downloaded again.
+
+### New
+- **Renamed folders on the site are pointed out.** The site renamed some folders in the same change
+  (for example `Nintendo/Super Famicom` is now `Nintendo/Super Nintendo Entertainment System`,
+  `Audio [FLAC]` is `FLAC`, `fixdats` moved into `DATs`). After a scan, the log names every
+  ticked folder that isn't on the site any more. Tick its new name and give it the same Saved as
+  place, so the files you already have are kept instead of being downloaded again. Until then,
+  Clean up lists them as removed from the site; don't delete them there.
+
 ## [1.4.11] - 2026-11-01
 
 ### New

@@ -1,16 +1,19 @@
 """In-process mock of a lolroms-style directory-listing site, for tests.
 
-Structure mirrors the real site:
-  /?dir=Atari%2F5200              listing page: sidebar of top-level dirs, nav, .sortbar, .back,
-                                  and a table of  name | date (YYYY-MM-DD) | size ("3.54 KB")
-  /?file=Atari%2F5200%2FGame.7z   file download: Range, If-Range, Last-Modified/ETag, 304
+Structure mirrors the real site (checked in a browser, November 2026):
+  /Atari/5200                     listing page: <nav> header bar, .path breadcrumb, .sortbar
+                                  (?sort=name), and div rows: name link + date ("2025-11-17")
+  /Atari/5200/Game%20%28USA%29.7z file download: Range, If-Range, Last-Modified/ETag, 304
+  anything else (an old ?dir= link, a folder the site doesn't have): the root listing, 200
 
 Modes (combine with commas):
   throttle    every 4th listing request answers 429 + Retry-After: 1
   drop        the first two downloads of Big.7z are cut off mid-transfer
   slowfile    Big.7z is streamed slowly (for Ctrl+C / progress tests)
   limitfile   adds Atari/5200/Limited.7z, which always answers with an HTML "limit" page
-  nometa      listing rows show no date / size (like a plain index page)
+  nometa      listing rows show no date (like a plain index page)
+  sizes       listing rows also show the size, as lolroms did until November 2026
+              ("2025-11-17 \u2022 3.54 KB")
   tables      render listings as an HTML table (name | date | size) instead of lolroms' div rows
   bulk        adds Atari/Bulk with 60 slow-ish files (for parallel-download tests)
   brokenfile  adds Atari/5200/Broken.7z, which always answers 502 (the site itself is fine)
@@ -18,8 +21,8 @@ Modes (combine with commas):
               many real lolroms folders, and a top-level one, Watara - Supervision (20250625-093232)
   feed        serves /rss.xml like lolroms: the `feed_cap` most recently changed files, newest
               first (modify() and add_file() add entries; it starts with old entries elsewhere)
-  fallback    a folder the site doesn't have answers 200 with the first top-level folder's
-              listing instead of 404 (lolroms since October 2026)
+  fallback    no effect any more: a folder the site doesn't have always answers 200 with the
+              root listing, like lolroms since November 2026
 Attributes you can change while a test runs:
   max_conc    downloads allowed at once; more get 503 + Retry-After: 1 (None = unlimited)
   daily_limit after this many completed downloads every file answers with an HTML limit page
@@ -55,6 +58,7 @@ BASE_FILES = {
 # root listing; like the real site, Arcade is only linked from the header bar (not the listing)
 TOP = ["Acorn", "ACT - Apricot PC Xi", "Atari"]
 HEADER_DIRS = ["Arcade"]
+EXTS = (".7z", ".zip", ".iso", ".txt", ".rar", ".dat")
 BIG = 3_000_000
 SMALL = 40_000
 BULK = 120_000
@@ -62,7 +66,13 @@ DEFAULT_DATE = "2025-11-17"
 
 
 def _q(s: str) -> str:
-    return up.quote_plus(s)
+    """A site path as lolroms writes it in its links: every segment percent-encoded."""
+    return up.quote(s, safe="/")
+
+
+def _feed_q(s: str) -> str:
+    """lolroms' feed writes links less strictly: spaces encoded, ( ) , ' left as they are."""
+    return up.quote(s, safe="/(),'!")
 
 
 def human_size(n: int) -> str:
@@ -112,6 +122,8 @@ class MockSite:
         self.lm_shift_days = 0             # make Last-Modified disagree with the listing date
         self.slow_all = False              # stream every file slowly (demos)
         self.requests: list = []           # (path, headers dict)
+        self.file_paths: list = []         # the same, for file downloads only
+        self.heads: list = []              # HEAD requests (asking a file's size)
         self._lock = threading.Lock()
         self._count = 0
         self._drops: dict = {}
@@ -137,12 +149,15 @@ class MockSite:
 
             def do_GET(self):  # noqa: N802
                 u = up.urlparse(self.path)
-                qs = up.parse_qs(u.query)
+                path = up.unquote(u.path).strip("/")
+                is_file = path.lower().endswith(EXTS) and "/" in path or path in site.all_files()
                 with site._lock:
                     site.requests.append((self.path, dict(self.headers)))
+                    if is_file:
+                        site.file_paths.append((self.path, dict(self.headers)))
                     site._count += 1
                     n = site._count
-                if site.down_after is not None and site.completed >= site.down_after and "file" in qs:
+                if site.down_after is not None and site.completed >= site.down_after and is_file:
                     site.down, site.down_after = 522, None
                 if site.down:
                     return self._send(site.down, b"<html><head><title>Connection timed out</title></head>"
@@ -153,20 +168,32 @@ class MockSite:
                     if "feed" not in site.modes:
                         return self._send(404, b"not found")
                     return self._send(200, site.rss(), "application/rss+xml")
-                if "file" in qs:
-                    return self._file(qs["file"][0])
-                if "dir" in qs:
-                    if "throttle" in site.modes and n % 4 == 0:
-                        return self._send(429, b"slow down", extra=[("Retry-After", "1")])
-                    d = qs["dir"][0]
-                    if d in site.tree or d in site.files:
-                        return self._send(200, site.listing(d).encode())
-                    if "fallback" in site.modes:
-                        return self._send(200, site.listing(site.top[0]).encode())
-                    return self._send(404, b"not found")
-                if u.path == "/":
-                    return self._send(200, site.listing("").encode())
-                return self._send(404, b"")
+                if is_file:
+                    if path not in site.all_files():
+                        return self._send(404, b"not found")
+                    return self._file(path)
+                if "throttle" in site.modes and n % 4 == 0 and path:
+                    return self._send(429, b"slow down", extra=[("Retry-After", "1")])
+                if path in site.tree or path in site.files or path in HEADER_DIRS:
+                    return self._send(200, site.listing(path).encode())
+                # lolroms answers anything else (old ?dir= links, folders it doesn't have) with
+                # its root listing
+                return self._send(200, site.listing("").encode())
+
+            def do_HEAD(self):  # noqa: N802
+                """lolroms answers HEAD for files with Content-Length (no Last-Modified / ETag on the
+                real site; the mock keeps sending them for the conditional-GET tests)."""
+                path = up.unquote(up.urlparse(self.path).path).strip("/")
+                with site._lock:
+                    site.heads.append(self.path)
+                if site.down:
+                    return self._head(site.down, "text/html", 0)
+                if path not in site.all_files():
+                    return self._head(200, "text/html; charset=utf-8", 0)
+                if site.daily_limit is not None and site.completed >= site.daily_limit:
+                    return self._head(200, "text/html; charset=utf-8", 0)
+                self._head(200, "application/octet-stream", len(site.content(path)),
+                           [("Accept-Ranges", "bytes")])
 
             def _limit_page(self):
                 self._send(200, b"<html><head><title>Daily download limit reached</title>"
@@ -301,47 +328,71 @@ class MockSite:
     def rss(self) -> bytes:
         items = sorted(self.feed, key=lambda e: e[1], reverse=True)[: self.feed_cap]
         out = "".join(
-            f"<item><title>{f.rsplit('/', 1)[-1]}</title><link>https://lolroms.com/?file={_q(f)}</link>"
-            f"<guid>https://lolroms.com/?file={_q(f)}</guid><pubDate>{formatdate(t, usegmt=True)}</pubDate></item>"
+            f"<item><title>{f.rsplit('/', 1)[-1].rsplit('.', 1)[0]}</title><link>https://lolroms.com/{_feed_q(f)}</link>"
+            f"<pubDate>{formatdate(t, usegmt=True)}</pubDate><description>{f}</description></item>"
             for f, t in items).replace("&", "&amp;")
         return (f'<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>LoLROMs Files'
                 f'</title><link>https://lolroms.com/</link><description>{self.feed_cap} most recently modified '
                 f'files</description><lastBuildDate>{formatdate(time.time(), usegmt=True)}</lastBuildDate>'
                 f'{out}</channel></rss>').encode()
 
+    def all_files(self) -> set:
+        return {f"{d}/{f}" if d else f for d, fs in self.files.items() for f in fs}
+
     def listing(self, d: str) -> str:
-        """lolroms' real markup (checked against the live site, Oct 2026):
-        <div class="list"><div class="row"><a href="?file=...">📄 name</a>
-        <span class="file-meta">2025-11-17 • 3.54 KB</span></div>...</div>
-        Mode "tables" renders the same rows as an HTML table instead."""
-        parent = d.rsplit("/", 1)[0] if "/" in d else ""
+        """lolroms' real markup (checked against the live site, November 2026):
+        <div class="path"><a href="/">Home</a> / <a href="/Nintendo">Nintendo</a> / ...</div>
+        <div class="sortbar"><a href="?sort=name" class="active">Name</a>...</div>
+        <div class="list"><div class="row"><a href="/Nintendo/Virtual%20Boy/T-En">T-En</a></div>
+        <div class="row"><a href="/Nintendo/Virtual%20Boy/3-D%20Tetris%20%28USA%29.7z">3-D Tetris
+        (USA)</a><span class="file-meta">2025-11-24</span></div>...</div>
+        The root page has no breadcrumb and no sort bar. Mode "tables" renders the rows as an HTML
+        table instead; mode "sizes" adds the size to the date like lolroms did until November 2026."""
         meta = "nometa" not in self.modes
         tables = "tables" in self.modes
         rows = ""
         for k in (self.top if d == "" else self.tree.get(d, [])):
-            href = f"?dir={_q(d + '/' + k if d else k)}"
-            rows += (f'<tr><td><a href="/{href}">{k}</a></td><td></td><td></td></tr>' if tables
-                     else f'<div class="row"><a href="{href}">\U0001F4C1 {k}</a></div>')
+            href = "/" + _q(d + "/" + k if d else k)
+            rows += (f'<tr><td><a href="{href}">{k}</a></td><td></td><td></td></tr>' if tables
+                     else f'<div class="row"><a href="{href}">{k}</a></div>')
         for f in self.files.get(d, []):
-            path = f"{d}/{f}"
+            path = f"{d}/{f}" if d else f
             date, size = self._version(path)[1], human_size(len(self.content(path)))
+            text = date + (f" \u2022 {size}" if "sizes" in self.modes else "")
             name = f.rsplit(".", 1)[0]
             if tables:
-                cells = f"<td>{date}</td><td>{size}</td>" if meta else ""
-                rows += f'<tr><td><a href="/?file={_q(path)}">{name}</a></td>{cells}</tr>'
+                cells = (f"<td>{date}</td><td>{size if 'sizes' in self.modes else ''}</td>") if meta else ""
+                rows += f'<tr><td><a href="/{_q(path)}">{name}</a></td>{cells}</tr>'
             else:
-                info = f'<span class="file-meta">{date} \u2022 {size}</span>' if meta else ""
-                rows += f'<div class="row"><a href="?file={_q(path)}">\U0001F4C4 {name}</a>{info}</div>'
+                info = f'<span class="file-meta">{text}</span>' if meta else ""
+                rows += f'<div class="row"><a href="/{_q(path)}">{name}</a>{info}</div>'
         body = (f"<table><tr><th>Name</th><th>Date</th><th>Size</th></tr>{rows}</table>" if tables
                 else f'<div class="list">{rows}</div>')
-        head = "".join(f'<a href="/?dir={_q(t)}"><img src="/i.webp">{t}</a>' for t in HEADER_DIRS)
-        return f"""<!doctype html><html><head><title>LoLROMs</title></head><body>
-<header class="topbar"><a href="/">LoLROMs</a>{head}
-<a href="https://discord.gg/x">Discord</a></header>
-<nav><a href="/?dir=Atari%2F2600">nav link</a></nav>
+        crumbs = sortbar = ""
+        if d:
+            parts = d.split("/")
+            crumbs = '<div class="path"><a href="/">Home</a>' + "".join(
+                f' / <a href="/{_q("/".join(parts[:i + 1]))}">{parts[i]}</a>' for i in range(len(parts))) + "</div>"
+            sortbar = ('<div class="sortbar"><a href="?sort=name" class="active">Name</a>'
+                       '<a href="?sort=date">Date</a><a href="?sort=size">Size</a></div>')
+        # the header bar links some sections with their names unencoded (/Pokéhacks), and has a
+        # file (the site's bulk download script) and the feed
+        head = "".join(f'<a href="/{t}" class="nav-item"><img src="/i.png"><span>{t}</span></a>'
+                       for t in HEADER_DIRS)
+        return f"""<html lang="en"><head><meta charset="utf-8"><title>LoLSuite | ROMs</title></head>
+<body>
+<nav>
+<a href="/" class="nav-item"><img src="/home.png"><span>Home</span></a>
+{head}
+<a href="/bulk_download.py" download="" class="nav-item"><img src="/py.png"><span>Bulk</span></a>
+<a href="/rss.xml" class="nav-item"><img src="/rss.png"><span>RSS</span></a>
+<form class="search-form" method="get"><input type="search" name="q" value=""><button type="submit">Search</button></form>
+</nav>
+<main>
 <div class="container">
-<div class="back"><a href="?dir={_q(parent)}">\u2b05 Back</a></div><div class="sortbar"><a class="active" href="?dir={_q(d)}&sort=name">Name</a><a href="?dir={_q(d)}&sort=date">Date</a><a href="?dir={_q(d)}&sort=size">Size</a></div>{body}
-</div><a href="/?search=x">search</a></body></html>"""
+{crumbs}{sortbar}{body}</div>
+</main>
+</body></html>"""
 
     # ---- lifecycle ----
     def start(self) -> "MockSite":
@@ -356,15 +407,22 @@ class MockSite:
     def paths(self):
         return [p for p, _ in self.requests]
 
+    def listing_reads(self):
+        """Folders whose listing was requested ("Atari/2600"; the root page is left out)."""
+        files = {q for q, _ in self.file_paths}
+        return [up.unquote(up.urlparse(q).path).strip("/") for q, _ in self.requests
+                if q not in files and up.urlparse(q).path not in ("/", "/rss.xml", "/robots.txt")]
+
     def file_requests(self):
         """[(path, Range header)] for every file request."""
-        return [(p, h.get("Range")) for p, h in self.requests if "file=" in p]
+        return [(p, h.get("Range")) for p, h in self.file_paths]
 
     def file_headers(self):
-        return [(p, h) for p, h in self.requests if "file=" in p]
+        return list(self.file_paths)
 
     def reset_log(self):
         self.requests.clear()
+        self.file_paths.clear()
 
 
 def content(path: str) -> bytes:

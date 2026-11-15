@@ -167,6 +167,53 @@ class Catalog:
             self.invalidate()
         return len(fixes)
 
+    def migrate_query_urls(self, base: str) -> int:
+        """Catalogs from before November 2026 store lolroms' old links (?file=Atari%2F5200%2FGame.7z,
+        ?dir=Atari%2F5200), which the site now answers with its root page. Rewrite them as the plain
+        paths it uses now (https://lolroms.com/Atari/5200/Game.7z), keeping what is known about
+        each file (synced state, dates). -> number of files rewritten."""
+        from urllib.parse import parse_qsl, quote, urlsplit
+        base = base.rstrip("/") + "/"
+
+        def new_url(url: str, key: str) -> Optional[str]:
+            for k, v in parse_qsl(urlsplit(url).query, keep_blank_values=True):
+                if k.lower() == key:
+                    return base + quote(v.strip("/"), safe="/")
+            return None
+
+        with self.lock:
+            rows = list(self.db.execute("SELECT url FROM files WHERE url LIKE '%?file=%' OR url LIKE '%&file=%'"))
+            have = {u for (u,) in self.db.execute("SELECT url FROM files WHERE url NOT LIKE '%?%'")}
+            n = 0
+            for (old,) in rows:
+                new = new_url(old, "file")
+                if new is None:
+                    continue
+                if new in have:                              # already read under its new address
+                    self.db.execute("DELETE FROM files WHERE url=?", (old,))
+                else:
+                    self.db.execute("UPDATE files SET url=? WHERE url=?", (new, old))
+                    have.add(new)
+                    n += 1
+            for path, url in list(self.db.execute("SELECT path, url FROM dirs WHERE url LIKE '%dir=%'")):
+                self.db.execute("UPDATE dirs SET url=? WHERE path=?", (new_url(url, "dir") or base, path))
+            self.db.commit()
+        if rows:
+            self.invalidate()
+        return n
+
+    def missing_ticks(self) -> list:
+        """Ticked folders the catalog doesn't have (any more): the site removed or renamed them."""
+        with self.lock:
+            dirs = {p.casefold() for (p,) in self.db.execute("SELECT path FROM dirs")}
+            rules = list(self.db.execute("SELECT path, include FROM selection"))
+        out = []
+        for path, include in rules:
+            folder = path[:-2] if path.endswith("/" + OWN.lstrip("/")) else path
+            if include and folder and folder.casefold() not in dirs:
+                out.append(folder)
+        return sorted(set(out), key=str.casefold)
+
     def invalidate(self) -> None:
         """Structural change (ticks, a finished scan, settings): rebuild the tree on next read."""
         self._tree = None
@@ -248,8 +295,9 @@ class Catalog:
                     "INSERT INTO files(url, dir, name, rel, ext, date, size, bytes, seen_scan) "
                     "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET dir=excluded.dir, "
                     "name=excluded.name, rel=excluded.rel, ext=excluded.ext, date=excluded.date, "
-                    "size=excluded.size, bytes=excluded.bytes, seen_scan=excluded.seen_scan",
-                    (furl, path, name, rel, info.ext, info.date, info.size, size_bytes(info.size), scan_id))
+                    "size=excluded.size, bytes=COALESCE(excluded.bytes, files.local_size, files.bytes), "
+                    "seen_scan=excluded.seen_scan",
+                    (furl, path, name, rel, info.ext, info.date, info.size, size_bytes(info.size) or None, scan_id))
         self.dirty = True
 
     def page_failed(self, path: str, error: str) -> None:
@@ -505,8 +553,9 @@ class Catalog:
                 args = list(types)
             words = ",".join("'%s'" % w for w in SYNCED_WORDS)
             for d, n, b, newest, sn, sb, fl in self.db.execute(
-                    f"SELECT dir, COUNT(*), SUM(bytes), MAX(date), "
-                    f"SUM(local IN ({words})), SUM(CASE WHEN local IN ({words}) THEN bytes ELSE 0 END), "
+                    f"SELECT dir, COUNT(*), SUM(COALESCE(bytes, local_size)), MAX(date), "
+                    f"SUM(local IN ({words})), "
+                    f"SUM(CASE WHEN local IN ({words}) THEN COALESCE(bytes, local_size) ELSE 0 END), "
                     f"SUM(error IS NOT NULL AND local IS NULL) FROM files {ext_filter} GROUP BY dir", args):
                 node = nodes.get(d)
                 if node is None:
@@ -558,7 +607,8 @@ class Catalog:
     def counts(self) -> dict:
         with self.lock:
             dirs = self.db.execute("SELECT COUNT(*) FROM dirs WHERE path<>''").fetchone()[0]
-            files, total = self.db.execute("SELECT COUNT(*), COALESCE(SUM(bytes),0) FROM files").fetchone()
+            files, total = self.db.execute(
+                "SELECT COUNT(*), COALESCE(SUM(COALESCE(bytes, local_size)),0) FROM files").fetchone()
         return {"dirs": dirs, "files": files, "bytes": total}
 
     # ------------------------------------------------------------------ history

@@ -38,7 +38,7 @@ It runs as a web page: in Docker (made for Unraid) or on Windows.
 
 | Area | What it does |
 |---|---|
-| Catalog | **Scan site** reads every listing page of lolroms.com (about 330 folders, 117,000+ files) into a local database. File links are never requested while scanning. Sections linked only from the site's header bar (Arcade, Pokéhacks, Audio [FLAC], fixdats) are included. |
+| Catalog | **Scan site** reads every listing page of lolroms.com (about 330 folders, 117,000+ files) into a local database. File links are never requested while scanning. Sections linked only from the site's header bar (Arcade, Pokéhacks, FLAC, DATs) are included. |
 | Folder tree | Every folder with file count, total size, newest file date and how much is synced. Columns sort by clicking their header (ascending → descending → name order). Search box finds folders by name. |
 | Saved as | A column in the folder tree with every folder's full path in the download folder (`/Apple/II`). Type another path (`/Apple II`) to put it there, or click **−date** on a dated folder. Everything below a folder follows it. While typing, RomM's platforms are suggested (`Sega 32X` -> `/sega32`), and a badge names the RomM platform a folder is saved under. |
 | Renamed folders | When the site moves a folder to a newer set date (`Archimedes (2023…)` → `Archimedes (2026…)`), ticks and Saved as settings follow it, after a scan or by themselves during a sync. |
@@ -120,12 +120,18 @@ Catalog and settings live in `config\` next to `start.bat`; the log is `config\r
 
 ### Scanning (building the catalog)
 
-- A **full scan** starts at `https://lolroms.com/` and follows `?dir=` folder links breadth-first
+- A **full scan** starts at `https://lolroms.com/` and follows folder links (plain paths such as
+  `/Nintendo/Virtual%20Boy`; `scanner.PathRules`) breadth-first
   with up to 8 parallel requests, pacing itself (it halves parallelism and doubles the delay on
   429/503/timeouts or slow answers and recovers gradually). It respects `robots.txt`.
-- Every listing row gives the file's name, link, **date** and **size** (see
-  [facts](#facts-about-lolromscom-this-relies-on)). Files are recognised from the link alone
-  (`?file=Folder%2FName.7z`); they are never requested during a scan.
+- Every listing row gives the file's name, link and **date** - and, until November 2026, its
+  **size** (see [facts](#facts-about-lolromscom-this-relies-on)). Files are recognised from the
+  link alone (`/Folder/Name.7z`); they are never requested during a scan. Links are kept in one
+  spelling (every segment percent-encoded, no `?sort=`), so the header's `/Pokéhacks` and the
+  listings' `/Pok%C3%A9hacks` are the same folder.
+- Folder sizes: the listing's size when it shows one, otherwise the size of the downloaded copy
+  (`COALESCE(bytes, local_size)`); folders with nothing downloaded show 0. A re-read that shows no
+  size keeps the size already known.
 - Only the file types chosen in Settings are counted (default **archives**: zip, 7z, rar, tar, gz…;
   "everything" adds iso, chd, ROM images…).
 - After a complete scan, files and folders the site no longer lists are removed from the catalog
@@ -156,7 +162,7 @@ downloaded before:
 | `.part` file, or smaller than recorded | **Resume** from where it stopped (HTTP Range) |
 | Listing date or size differs from when it was saved | **Update**: download again; the old copy is replaced only when the new one is complete |
 | Matches | **Skip**, no request |
-| Present but not in the manifest (copied in by hand) | **Adopt** if its size fits the listing, otherwise resume/update |
+| Present but not in the manifest (copied in by hand) | **Adopt** if its size fits the listing, otherwise resume/update. When the listing shows no size (lolroms since November 2026): **Measure** - one HEAD request for the site's size (`Content-Length`, nothing downloaded); same size -> adopted, smaller -> resumed, different -> downloaded again. If the site gives no usable size it's adopted as before |
 
 - Planning runs in a worker thread (`plan_all()` in `Engine._sync`; the manifest's SQLite connection
   allows it because no download runs yet) and asks the disk once per file (`os.stat`, passed to
@@ -188,7 +194,7 @@ downloaded before:
   there; its Saved as settings follow (`Engine._follow_map_renames`). During
   the pre-sync refresh, a ticked dated folder that can't be read makes the engine read its parent's
   listing only (`Scanner.run(parent, recurse=False)`), follow the rename, and refresh the new folder.
-- **List of recent changes** (`feed.py`, `/rss.xml`: `<item>` with a `?file=` link and `pubDate`, no
+- **List of recent changes** (`feed.py`, `/rss.xml`: `<item>` with a link to the file and `pubDate`, no
   sizes; ~100-200 files, often under a day). Before a sync's refresh, `Engine._feed_plan()` reads it;
   `feed.plan()` lets a ticked root skip its full re-read only if the feed's oldest item is no newer
   than the moment its contents were last known and it had a full re-read within `FULL_EVERY` (24 h).
@@ -484,23 +490,39 @@ python run.py --data downloads --config config
 
 ## Facts about lolroms.com this relies on
 
-Verified in a browser (October 2026). If the site changes, these are the first things to check.
+Verified in a browser (November 2026). If the site changes, these are the first things to check.
+Trimmed copies of two live pages are in `tests/fixtures/` (`test_paths.py` reads them).
 
-- Folders: `https://lolroms.com/?dir=Nintendo%2FSuper+Famicom`; files: `?file=Folder%2FName.7z` (the
-  extension is in the query value). `&sort=name|date|size` variants are the same listing.
-- Listing row: `<div class="row"><a href="?file=…">📄 Name</a><span class="file-meta">2025-11-22 • 1.16 KB</span></div>`.
-  The link text is never used (names contain dates).
-- Ignored regions: `.sortbar`, `.back` ("⬅ Back"), `<nav>`, header bars - except that a full scan
-  reads one-level `?dir=` links from the root page's header (Arcade, Pokéhacks, Audio [FLAC], fixdats).
-- File responses: `Content-Length`, `Accept-Ranges: bytes`, `Content-Disposition`, served through
-  Cloudflare; **no `Last-Modified` or `ETag`**.
+- **November 2026: plain paths.** Folders: `https://lolroms.com/Nintendo/Virtual%20Boy`; files:
+  `https://lolroms.com/Nintendo/Virtual%20Boy/3-D%20Tetris%20%28USA%29.7z` (every segment
+  percent-encoded, like `quote(path, safe="/")`). Sort links are relative: `?sort=name|date|size`.
+  Old `?dir=` / `?file=` links, and folders the site doesn't have, answer **200 with the root
+  listing**. Catalogs with old links are rewritten at start (`Catalog.migrate_query_urls`).
+- Page: `<nav>` (header bar) then `<main><div class="container">`, with
+  `<div class="path"><a href="/">Home</a> / <a href="/Nintendo">Nintendo</a> / …</div>` (breadcrumb;
+  its last link is the folder shown - `scanner.shown_dir()`), `<div class="sortbar">` and
+  `<div class="list">`. The root page has no breadcrumb and no sort bar.
+- Folder row: `<div class="row"><a href="/Nintendo/Virtual%20Boy/T-En">T-En</a></div>`. File row:
+  `<div class="row"><a href="/…/Name.7z">Name</a><span class="file-meta">2025-11-24</span></div>` -
+  **the date only, no size** (until November 2026: `2025-11-22 • 1.16 KB`, with 📄/📁 in the link
+  text). The link text is never used (names contain dates).
+- Ignored regions: `.sortbar`, `.path`, `<nav>` - except that a full scan reads one-level folder
+  links from the root page's header bar (`header_dirs()`): `/Arcade`, `/Pokéhacks` (unencoded),
+  `/FLAC`, `/DATs`. The bar also links `/bulk_download.py` (with a `download` attribute) and
+  `/rss.xml`, which are not folders. A search box (`?q=`) lists matching files from anywhere.
+- In the same change some folders were renamed or moved: `Nintendo/Super Famicom` ->
+  `Nintendo/Super Nintendo Entertainment System`, `Audio [FLAC]` -> `FLAC`, `fixdats` ->
+  `DATs/fixdats` (seen November 2026). Rom Sync can't tell such renames from removals: after a scan
+  it names ticked folders that are gone (`Catalog.missing_ticks()`).
+- File responses: `Content-Length` (also for HEAD), `Accept-Ranges: bytes`, `Content-Type:
+  application/octet-stream`, served through Cloudflare; **no `Last-Modified` or `ETag`**.
+- The feed's links are plain paths too, less strictly encoded:
+  `https://lolroms.com/SEGA/Mega%20Drive%20-%20Genesis/Name%20(World)%20(En,Fr).7z`.
 - When the daily download limit is reached the site serves an HTML page instead of the file.
 - **October 2026: folder names lost their set dates** (`Acorn/Archimedes (20231029-220453)` ->
-  `Acorn/Archimedes`), and a `?dir=` the site doesn't have answers **200 with another folder's
-  listing** (the first top-level folder's), not 404. The sort links (`?dir=<shown>&sort=name`) name
-  the folder actually shown; `scanner.shown_dir()` compares it with the folder asked for and treats a
-  mismatch as "not on the site any more". The header gained DATs (`?dir=DATs`, picked up as a
-  top-level folder), RSS (`/rss.xml`, the most recently changed files; used by `feed.py`) and LoLSuite (another site).
+  `Acorn/Archimedes`), and a `?dir=` the site didn't have answered 200 with another folder's
+  listing, not 404. `scanner.shown_dir()` compares the folder shown with the folder asked for and
+  treats a mismatch as "not on the site any more" (since November 2026 it reads the breadcrumb).
 - Before October 2026 many folders carried the dump set's date at the end of the name, in two forms:
   `Archimedes (20231029-220453)` (` (YYYYMMDD-HHMMSS)`) and
   `PC Engine CD & TurboGrafx CD (2026-10-14 05-51-53)` (` (YYYY-MM-DD HH-MM-SS)`); seen October 2026.

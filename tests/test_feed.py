@@ -10,7 +10,7 @@ ATARI = ("Atari/2600", "Atari/5200")
 
 
 def dir_reads(site):
-    return sorted(p for p in site.paths() if "dir=" in p)
+    return sorted(site.listing_reads())
 
 
 def feed_reads(site):
@@ -42,9 +42,9 @@ def test_only_changed_folders_are_read_and_their_files_fetched(site_factory, app
     site.add_file("Atari/2600", "Brand New (USA).7z")
     site.add_file("Atari/Lynx", "Not Ticked.7z")              # in the feed, but not ticked
     sync(c)
-    assert dir_reads(site) == ["/?dir=Atari%2F2600", "/?dir=Atari%2F5200"]
+    assert dir_reads(site) == ["Atari/2600", "Atari/5200"]
     fetched = sorted(p for p, _ in site.file_requests())
-    assert len(fetched) == 2 and any("Brand+New" in p for p in fetched) and any("Galaxian" in p for p in fetched)
+    assert len(fetched) == 2 and any("Brand%20New" in p for p in fetched) and any("Galaxian" in p for p in fetched)
     assert "Atari/2600/Brand New (USA).7z" in on_disk(c.data)
     site.reset_log()
     sync(c)                                  # known now (they may be read once more within minutes)
@@ -58,7 +58,7 @@ def test_a_list_too_short_to_reach_back_means_a_full_re_read(site_factory, app_f
     time.sleep(0.01)
     site.add_file("Atari/Lynx", "Two.7z")                     # the list now starts after the last sync
     sync(c)
-    assert dir_reads(site) == ["/?dir=Atari%2F2600", "/?dir=Atari%2F5200"]
+    assert dir_reads(site) == ["Atari/2600", "Atari/5200"]
 
 
 def test_a_newly_ticked_folder_is_trusted_from_the_last_full_scan(site_factory, app_factory):
@@ -66,7 +66,7 @@ def test_a_newly_ticked_folder_is_trusted_from_the_last_full_scan(site_factory, 
     select(c, "Atari/800")
     site.add_file("Atari/800/Flux", "Fresh.zip")
     sync(c)
-    assert dir_reads(site) == ["/?dir=Atari%2F800%2FFlux"]
+    assert dir_reads(site) == ["Atari/800/Flux"]
     assert "Atari/800/Flux/Fresh.zip" in on_disk(c.data)
 
 
@@ -82,16 +82,16 @@ def test_every_folder_is_still_re_read_in_full_once_a_day(site_factory, app_fact
     db.commit()
     db.close()
     sync(c)
-    assert dir_reads(site) == ["/?dir=Atari%2F2600", "/?dir=Atari%2F5200"]
+    assert dir_reads(site) == ["Atari/2600", "Atari/5200"]
 
 
 def test_without_a_list_or_when_turned_off_everything_is_read(site_factory, app_factory):
     site, c = setup(site_factory, app_factory, modes="")       # no rss.xml on this site
     sync(c)
-    assert dir_reads(site) == ["/?dir=Atari%2F2600", "/?dir=Atari%2F5200"]
+    assert dir_reads(site) == ["Atari/2600", "Atari/5200"]
     site, c = setup(site_factory, app_factory, settings={"use_feed": False})
     sync(c)
-    assert feed_reads(site) == [] and dir_reads(site) == ["/?dir=Atari%2F2600", "/?dir=Atari%2F5200"]
+    assert feed_reads(site) == [] and dir_reads(site) == ["Atari/2600", "Atari/5200"]
 
 
 def test_parse_feed_and_plan():
@@ -103,6 +103,12 @@ def test_parse_feed_and_plan():
             b'<pubDate>Thu, 29 Oct 2026 22:47:19 GMT</pubDate></item></channel></rss>')
     items, built = feed.parse_feed(body)
     assert [d for d, _ in items] == ["Nintendo/Nintendo 64/Hacks [X]", "Commodore/64"]
+    # the feed's links since November 2026: plain paths, spaces encoded, ( ) , left as they are
+    new = feed.parse_feed(
+        b'<?xml version="1.0"?><rss><channel><item><title>Neon Karate 1985 (World) (En,Fr)</title>'
+        b'<link>https://lolroms.com/SEGA/Mega%20Drive%20-%20Genesis/Neon%20Karate%201985%20(World)%20(En,Fr).7z</link>'
+        b'<pubDate>Sat, 14 Nov 2026 21:02:39 GMT</pubDate></item></channel></rss>')[0]
+    assert [d for d, _ in new] == ["SEGA/Mega Drive - Genesis"]
     oldest = min(t for _, t in items)
     now = built + 60
     # known just after the oldest change: the list holds everything since, Commodore's change is known

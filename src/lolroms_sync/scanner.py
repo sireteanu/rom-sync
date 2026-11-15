@@ -1,6 +1,9 @@
 """Reads the site's listing pages (never the files) into the catalog.
 
-A full scan starts at the site root; a folder scan starts at ?dir=<folder> and stays below it.
+A full scan starts at the site root; a folder scan starts at /<folder> and stays below it.
+Since November 2026 lolroms addresses folders and files by plain paths
+(https://lolroms.com/Nintendo/Virtual%20Boy, .../Virtual%20Boy/Game%20%28USA%29.7z); before that it
+used ?dir= and ?file= links, which it now answers with its root listing.
 """
 from __future__ import annotations
 
@@ -10,13 +13,13 @@ import random
 import re
 import time
 from typing import Optional
-from urllib.parse import parse_qsl, quote_plus, unquote_plus, urlsplit
+from urllib.parse import parse_qsl, quote, unquote, urlsplit
 from urllib.robotparser import RobotFileParser
 
 import httpx
 
 from .core.config import Config
-from .core.constants import MAX_BODY, RETRY_STATUSES, THROTTLE_STATUSES
+from .core.constants import DEFAULT_IGNORE_CLASSES, MAX_BODY, RETRY_STATUSES, THROTTLE_STATUSES
 from .core.extract import LinkExtractor
 from .core.limits import Limiter, _retry_after
 from .core.urls import UrlRules
@@ -28,43 +31,60 @@ log = logging.getLogger("dircrawl")
 
 
 def dir_of(url: str) -> str:
-    for k, v in parse_qsl(urlsplit(url).query, keep_blank_values=True):
+    """The site folder a listing URL shows: https://lolroms.com/Atari/5200 -> "Atari/5200".
+    Old ?dir= links are understood too (catalogs from before November 2026)."""
+    p = urlsplit(url)
+    for k, v in parse_qsl(p.query, keep_blank_values=True):
         if k.lower() == "dir":
             return v.strip("/")
-    return ""
+    return unquote(p.path).strip("/")
 
 
-# the listing's sort links name the folder actually shown: href="?dir=Acorn&amp;sort=name"
-_SORT_DIR = re.compile(rb'href="[^"]*[?&]dir=([^"&#]*)&(?:amp;)?sort=', re.IGNORECASE)
+def site_path(path: str) -> str:
+    """A site folder or file as lolroms writes it in its links: every segment percent-encoded."""
+    return quote(path.strip("/"), safe="/")
+
+
+# the breadcrumb names the folder a listing shows:
+# <div class="path"><a href="/">Home</a> / <a href="/Nintendo">Nintendo</a> / <a href="/Nintendo/DS">DS</a></div>
+_CRUMBS = re.compile(rb'<div[^>]*class="path"[^>]*>(.*?)</div>', re.IGNORECASE | re.DOTALL)
+_HREF = re.compile(rb'href="([^"#?]*)', re.IGNORECASE)
+_LISTING = re.compile(rb'class="list"', re.IGNORECASE)
 
 
 def shown_dir(body: bytes) -> Optional[str]:
-    """The folder a listing page shows, from its sort links; None if it has none.
+    """The folder a listing page shows, from its breadcrumb ("" = the root listing, which has
+    none); None if the page isn't a listing at all.
 
-    Since October 2026 lolroms answers a folder it doesn't have (an old name, e.g. one that lost
-    its set date) with *another* folder's listing and no error, so a page must be checked against
-    the folder that was asked for."""
-    m = _SORT_DIR.search(body)
+    lolroms answers a folder it doesn't have (an old name, an old ?dir= link) with its root listing
+    and no error, so a page must be checked against the folder that was asked for."""
+    m = _CRUMBS.search(body)
     if m is None:
-        return None
-    return unquote_plus(m.group(1).decode("utf-8", "replace")).strip("/")
+        return "" if _LISTING.search(body) else None
+    hrefs = _HREF.findall(m.group(1))
+    if not hrefs:
+        return ""
+    return unquote(hrefs[-1].decode("utf-8", "replace")).strip("/")
 
 
 def header_dirs(body: bytes, page_url: str, rules: UrlRules) -> set:
     """Top-level folders linked from anywhere on the root page, header bar included.
 
-    lolroms links some sections (Arcade, Pokéhacks, Audio [FLAC], fixdats) only from its header
-    bar, which the normal extractor skips as navigation."""
+    lolroms links some sections (Arcade, Pokéhacks, FLAC, DATs) only from its header bar, which
+    the normal extractor skips as navigation. The bar also links a file (bulk_download.py) and the
+    feed (rss.xml): links with a download attribute or a file name are left out."""
     from urllib.parse import urljoin
     from selectolax.lexbor import LexborHTMLParser
     out = set()
     for a in LexborHTMLParser(body).css("a[href]"):
         href = (a.attributes.get("href") or "").strip()
-        if "dir=" not in href.lower():
+        if not href or "download" in a.attributes or href.startswith(("#", "?", "mailto:", "javascript:")):
             continue
         url = rules.canonical(urljoin(page_url, href))
-        d = dir_of(url) if url else ""
-        if d and "/" not in d and rules.in_scope(url):
+        if not url or not rules.crawlable(url) or rules.file_ext(url) or urlsplit(url).query:
+            continue
+        d = dir_of(url)
+        if d and "/" not in d and "." not in d.rsplit("/", 1)[-1][-5:] and rules.in_scope(url):
             out.add(url)
     return out
 
@@ -86,8 +106,31 @@ def _dur(secs: float) -> str:
 
 
 def url_for(base: str, path: str) -> str:
-    base = base.rstrip("/") + "/"
-    return base + (f"?dir={quote_plus(path)}" if path else "")
+    return base.rstrip("/") + "/" + site_path(path)
+
+
+class PathRules(UrlRules):
+    """lolroms' folders are plain paths: a folder scan reads that folder and the folders below it
+    (case-insensitive, like the site), never its parent or siblings. Links are compared in one
+    spelling (every segment percent-encoded, no query): the header writes /Pokéhacks, the listings
+    /Pok%C3%A9hacks, and ?sort= variants are the same listing."""
+
+    def __init__(self, cfg: Config, root: str):
+        self.root = root.strip("/").casefold()
+        super().__init__(cfg)
+
+    def canonical(self, url: str) -> Optional[str]:
+        c = super().canonical(url)
+        if c is None:
+            return None
+        p = urlsplit(c)
+        return p._replace(path="/" + site_path(unquote(p.path)), query="").geturl()
+
+    def in_scope(self, url: str) -> bool:
+        if not self.same_site(url):
+            return False
+        d = dir_of(url).casefold()
+        return not self.root or d == self.root or d.startswith(self.root + "/")
 
 
 class Scanner:
@@ -218,9 +261,11 @@ class Scanner:
         self.read: set = set()                # folders whose listing was read in this run
         self.started = time.monotonic()
         start = url_for(self.base, root)
-        cfg = Config(start_url=start, keep_params=frozenset({"dir"}), workers=self.workers,
-                     delay=self.delay, user_agent=self.user_agent)
-        rules = UrlRules(cfg)
+        # .path: the breadcrumb (Home / Nintendo / DS), links upwards
+        cfg = Config(start_url=start, keep_params=frozenset(), workers=self.workers,
+                     delay=self.delay, user_agent=self.user_agent,
+                     ignore_classes=DEFAULT_IGNORE_CLASSES | {"path"})
+        rules = PathRules(cfg, root)
         extractor = LinkExtractor(cfg, rules)
         self.lim = Limiter(self.workers, self.delay, True, 4.0)
         self.queue = asyncio.Queue()
@@ -281,6 +326,7 @@ class Scanner:
                 links = set(links) | header_dirs(body, final, rules)
             rows = []
             for furl, info in files.items():
+                furl = rules.canonical(furl) or furl
                 rel = rules.rel_path(furl, self.folder_map)
                 rows.append((furl, rel.rsplit("/", 1)[-1], rel, info))
             new = [l for l in links if l not in seen]

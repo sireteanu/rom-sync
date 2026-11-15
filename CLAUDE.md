@@ -53,9 +53,10 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   this folder" row in the tree); `effective_files()` decides which folders' files are synced.
   Ticking every part of a folder (subfolders, and its own files if any) folds into one tick on the
   folder (`_fold()`), so its box shows a tick, not "-". Clicking a "-" box ticks all.
-- lolroms links some top-level sections (Arcade, Pokéhacks, Audio [FLAC], fixdats) **only from its
+- lolroms links some top-level sections (Arcade, Pokéhacks, FLAC, DATs) **only from its
   header bar**, which the extractor skips as navigation. `scanner.header_dirs()` adds every
-  one-segment `?dir=` link from the root page during a full scan. Mock: `HEADER_DIRS`.
+  one-segment folder link from the root page during a full scan (not `/bulk_download.py`, which
+  has a `download` attribute, nor `/rss.xml`). Mock: `HEADER_DIRS`.
 - Column sorting (Folder/Files/Size/Updated/Synced: asc -> desc -> name order) is client-side in
   app.js (`reorder()`); empty folders always sort last. Choice kept in localStorage.
 - **Clean up** (`cleanup.py`): after a sync that wasn't stopped or paused, `Engine._check_leftovers()`
@@ -71,8 +72,8 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
   no rules dialog, no subfolders button (removed in 1.4.6), no text file. Keep it fast: the owner
   renames almost every folder, mostly to RomM platform folders (Enter / blur saves, "−date",
   RomM suggestions). Saving, and every start, runs `Catalog.remap(engine.rel_of)`.
-- **Missing folders**: lolroms answers an unknown `?dir=` with another folder's listing (200). Always
-  check a listing with `scanner.shown_dir()` before trusting it, and never let `Catalog.prune()`
+- **Missing folders**: lolroms answers a folder it doesn't have (and any old `?dir=` link) with its
+  root listing (200). Always check a listing with `scanner.shown_dir()` (the breadcrumb) before trusting it, and never let `Catalog.prune()`
   trust a folder that was only linked in a scan. Renamed folders: ticks and Saved as follow
   (`follow_renames`), files on disk follow (`renamed.py`) - never re-download what only moved.
 - **Feed shortcut** (`feed.py`): only ever a way to skip work. When in doubt (feed too short, missing,
@@ -126,18 +127,21 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
 
 ## How it works (keep these invariants)
 1. **File links are recognised from the URL alone and never fetched while scanning.**
-   lolroms file links look like `/?file=Atari%2F5200%2FGame%20(USA).7z` — the extension is in a
-   *query value*, not the path. `UrlRules.file_ext()` and the fast path in `LinkExtractor.extract()`
-   check both. Only a sync ever requests a file URL. (Regression history: v2 treated these
+   Since November 2026 lolroms links are plain paths: folders `/Atari/5200`, files
+   `/Atari/5200/Game%20%28USA%29.7z` (before: `?dir=` / `?file=` query links, which the site now
+   answers with its root page; `Catalog.migrate_query_urls()` rewrites old catalogs at start).
+   `UrlRules.file_ext()` and the fast path in `LinkExtractor.extract()` check the path and query
+   values. Only a sync ever requests a file URL (and a HEAD for a file copied in by hand, see 5a). (Regression history: v2 treated these
    as pages, fetched every file and collapsed them onto the site root, which caused a crawl loop.)
-2. **Scope**: only the start listing and its subfolders are read. For `?dir=Atari`, a URL is in
-   scope if its `dir` value equals `Atari` or starts with `Atari/` (case-insensitive). The sidebar
+2. **Scope**: only the start listing and its subfolders are read (`scanner.PathRules`). For
+   `/Atari`, a URL is in scope if its path equals `Atari` or starts with `Atari/` (case-insensitive). The sidebar
    (all top-level dirs), the logo link to `/` and nav links are all out of scope or ignored.
-3. **Canonical URLs**: only the start URL's query params are kept (`dir`), so `&sort=` variants
-   dedupe to one request (`Config.keep_params`).
+3. **Canonical URLs**: no query params are kept (`keep_params=frozenset()`), so `?sort=` variants
+   dedupe to one request, and `PathRules.canonical()` writes every path in one spelling (each
+   segment percent-encoded), so `/Pokéhacks` and `/Pok%C3%A9hacks` are one folder.
 4. **Ignored page regions**: `<nav>`, site-level `<header>`, role=navigation/banner, NAV_TOKENS
-   class/ids (`Config.ignore_nav`), and always `.sortbar` / `.back` (lolroms' sort bar and
-   "⬅ Back" link).
+   class/ids (`Config.ignore_nav`), and always `.sortbar` / `.back`; the scanner also skips
+   `.path` (the breadcrumb, links upwards).
 5. **Downloads** go to `<folder>/<path from the file URL>` (folder segments go through the user's
    Saved as settings, `folder_map.py`, in `UrlRules.rel_path()`; file names never change; Clean up maps
    catalog folders to disk with the same `FolderMap.disk_folder()`, so both must stay in step;
@@ -146,9 +150,11 @@ start.bat, run.py   launchers (`run` name so it never shadows the package)
    and archive headers are checked against `MAGIC`. The file's mtime is set to the site's date.
 5a. **Sync** (`sync.plan`): each listed file is compared with the disk and the manifest in the download
    folder (what the listing showed when it was saved + Last-Modified/ETag). Real lolroms markup
-   (verified in a browser, Oct 2026): `<div class="row"><a href="?file=…">📄 name</a>
-   <span class="file-meta">2025-11-17 • 3.54 KB</span></div>` — no table, date and size share one
-   span. `LinkExtractor._row_info` reads that and table rows (`tests/mock_site.py` mode `tables`);
+   (verified in a browser, Nov 2026; copies in `tests/fixtures/`): `<div class="row"><a
+   href="/Atari/5200/Name.7z">name</a><span class="file-meta">2025-11-17</span></div>` — **a date,
+   no size** (until November 2026 `2025-11-17 • 3.54 KB`; MockSite mode `sizes`). No size means:
+   an unchanged date = up to date, folder totals use the downloaded size, and a file in the folder
+   that isn't in the manifest gets MEASURE (one HEAD for `Content-Length`) before it's adopted. `LinkExtractor._row_info` reads that and table rows (`tests/mock_site.py` mode `tables`);
    the link text is never used (names contain dates). lolroms sends **no Last-Modified or ETag**
    for files, so the listing date is the only date: saved files get it at 12:00 local time.
    new / missing -> download; `.part` or smaller than recorded -> resume; listing date or size differs

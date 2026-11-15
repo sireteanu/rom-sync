@@ -22,13 +22,13 @@ import httpx
 from .config import Config
 from .constants import CHUNK, MAGIC, RETRY_STATUSES, THROTTLE_STATUSES
 from .limits import DownloadGate, RateLimit, _retry_after, _total_from_headers
-from .sync import (ADOPT, CHECK, FETCH_ACTIONS, NEW, RESUME, UPDATE, FileInfo, Manifest, http_date,
+from .sync import (ADOPT, CHECK, FETCH_ACTIONS, MEASURE, NEW, RESUME, UPDATE, FileInfo, Manifest, http_date,
                    http_date_epoch, plan, stamp_file)
 from .util import DiskFull, FetchError, fmt_bytes, fs_path
 
 log = logging.getLogger("dircrawl")
 
-DONE_WORD = {NEW: "new", UPDATE: "updated", RESUME: "resumed", CHECK: "updated"}
+DONE_WORD = {NEW: "new", UPDATE: "updated", RESUME: "resumed", CHECK: "updated", MEASURE: "updated"}
 DONE, QUEUED = "done", "queued"     # download() results (or a float: retry after that many seconds)
 MAX_THROTTLE_RETRIES = 20          # push-back from the server doesn't use up a file's normal retries
 SITE_TRIES = 3                     # failed tries caused by the site before checking whether it's down
@@ -190,6 +190,32 @@ class Downloader:
         if self.gate:
             await self.gate.throttled(why)
 
+    async def _measure(self, url, rel, dest, info) -> Optional[str]:
+        """A file that was already in the folder, with no size in the listing: compare it with the
+        size the site gives for it (HEAD, nothing downloaded). Same size -> counted as synced
+        (returns None); shorter -> RESUME; different -> UPDATE. When the site gives no usable size,
+        it's counted as synced as before (its date already matched the listing)."""
+        local = os.path.getsize(dest)
+        total = None
+        try:
+            r = await self.client.head(url)
+            if r.status_code == 200 and "text/html" not in r.headers.get("content-type", "").lower():
+                total = _total_from_headers(r.headers, 200, 0)
+        except httpx.HTTPError as e:
+            log.debug("couldn't ask the site for the size of %s: %s", rel, e)
+        if total is None or total == local:
+            self.manifest.done(rel, url, local if total is None else total, None, None, info)
+            self._set_mode(dest)
+            self._done(url, rel, "already in folder", local)
+            return None
+        if local < total:
+            log.info("%s is in the folder but incomplete (%s of %s) - resuming it", rel,
+                     fmt_bytes(local), fmt_bytes(total))
+            return RESUME
+        log.info("%s is in the folder but its size differs from the site's (%s, the site has %s) - "
+                 "downloading it again", rel, fmt_bytes(local), fmt_bytes(total))
+        return UPDATE
+
     # ---- the download ----
     async def download(self, url: str, rel: str, info: FileInfo, action: str, reason: str = ""):
         """Fetch one file. Returns:
@@ -254,6 +280,12 @@ class Downloader:
             os.replace(dest, part)                         # continue a truncated file
         if action == UPDATE and os.path.exists(part) and cfg.overwrite and url not in self.retry_state:
             os.remove(part)
+        if action == MEASURE:
+            action = await self._measure(url, rel, dest, info)
+            if action is None:
+                return DONE
+            if action == RESUME and not os.path.exists(part):
+                os.replace(dest, part)
         log.debug("%s: %s (%s)", action, rel, reason)
         ext = os.path.splitext(rel)[1].lower()
         rec = man.get(rel)

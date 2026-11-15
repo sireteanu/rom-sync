@@ -40,7 +40,8 @@ def test_files_deleted_by_hand_stop_counting_as_synced_and_come_back_at_next_syn
     assert (c.data / ADV).exists()
 
 
-def test_files_copied_in_by_hand_count_as_synced(site, app_factory):
+def test_files_copied_in_by_hand_count_as_synced(site_factory, app_factory):
+    site = site_factory("sizes")                                 # the size check needs listing sizes
     c = app_factory(site)
     scan(c)                                                      # nothing ticked, nothing synced
     (c.data / "Atari/2600").mkdir(parents=True)

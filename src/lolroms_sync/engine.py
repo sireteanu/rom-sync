@@ -93,6 +93,10 @@ class Engine:
         log.setLevel(logging.DEBUG)
         self._keep_romm_settings()            # after the log is set up, so it shows in the page
         self.fmap = self._load_places()
+        moved = self.catalog.migrate_query_urls(self.base)
+        if moved:
+            log.info("lolroms now uses plain folder and file links: %d catalog entries updated to "
+                     "them (nothing on disk changes)", moved)
         self._remap(at_start=True)
         self._log_startup()
         self.job: Optional[dict] = None
@@ -144,7 +148,7 @@ class Engine:
     def rel_of(self, url: str) -> str:
         """Where a file URL is saved, relative to the download folder ("Saved as" applied)."""
         if getattr(self, "_url_rules", None) is None:
-            self._url_rules = UrlRules(Config(start_url=self.base, keep_params=frozenset({"dir"})))
+            self._url_rules = UrlRules(Config(start_url=self.base, keep_params=frozenset()))
         return self._url_rules.rel_path(url, self.fmap)
 
     def _remap(self, at_start: bool = False) -> int:
@@ -425,6 +429,12 @@ class Engine:
             out["site_down"] = True
         if renamed:
             self._follow_map_renames(renamed)
+        missing = self.catalog.missing_ticks()
+        if missing and not down and not self.stop_requested:
+            log.warning("Ticked folders that aren't on the site any more (removed, or renamed by the "
+                        "site): %s. Files already downloaded stay where they are - tick the folder's "
+                        "new name and give it the same Saved as, or Clean up lists them as removed.",
+                        ", ".join(missing[:20]) + (f" and {len(missing) - 20} more" if len(missing) > 20 else ""))
         if roots is None and not root and (out.get("/") or {}).get("status") == "done":
             st = dict(self.catalog.settings().get("feed_state") or {})
             st["site_read"] = started - sitefeed.MARGIN

@@ -9,8 +9,10 @@ Investigate: $ARGUMENTS
 
 1. **Look at the real page structure.** Fetch one listing page and one deeper sub-folder page
    (ask the user first - development never touches the real site unasked). Record:
-   - how folder links are formed (`?dir=a%2Fb`) and which sections are only linked from the header
-   - how file links are formed (`?file=...ext`) and the markup of a file row (date, size)
+   - how folder links are formed (`/a/b`; `?dir=a%2Fb` before November 2026) and which sections are only linked from the header
+   - how file links are formed (`/a/b/Name.7z`) and the markup of a file row (date, size)
+   - the built-in browser or Claude in Chrome can read the raw HTML with a short script
+     (`document.documentElement.outerHTML`); WebFetch only returns a summary, not the markup
    - the class or id names of the header, nav, sidebar, sort bar and back link, plus any pagination
 2. **Reproduce in the mock.** Copy the quirk into `tests/mock_site.py` (the mock must match the live
    markup, see CLAUDE.md "Gotchas") and add a failing test in `tests/test_engine.py` or

@@ -16,13 +16,13 @@ def test_full_scan_builds_the_catalog_without_touching_files(site, app_factory):
     assert not site.file_requests()
     top = kids(c)
     assert set(top) == {"Acorn", "ACT - Apricot PC Xi", "Arcade", "Atari"}
-    assert top["ACT - Apricot PC Xi"]["error"] == "HTTP 404"          # a broken folder is shown, not fatal
+    assert top["ACT - Apricot PC Xi"]["error"] == "not on the site any more"   # shown, not fatal
     atari = tree(c, "Atari")["node"]
     assert atari["files"] == 7                                       # archives only (no .iso / .txt)
     assert set(kids(c, "Atari")) == {"2600", "5200", "800", "Lynx"}
     assert kids(c, "Atari/800")["Flux"]["files"] == 2
     assert st["catalog"]["files"] == 9 and st["catalog"]["last_full_scan"]["status"] == "done"
-    pages = [p for p in site.paths() if "dir=" in p]
+    pages = site.listing_reads()
     assert len(pages) == len(set(pages)), "each listing is read once"
 
 
@@ -89,7 +89,7 @@ def test_folder_files_listing(site, app_factory):
     data = c.get("/api/files", params={"path": "Atari/2600"}).json()
     assert data["total"] == 3
     assert {f["date"] for f in data["files"]} == {"2025-11-17"}
-    assert all(f["size"] for f in data["files"])
+    assert not any(f["size"] for f in data["files"])          # lolroms shows no sizes any more
 
 
 def test_settings_validate_and_persist(site, app_factory):
@@ -146,7 +146,8 @@ def test_ticking_every_subfolder_ticks_the_parent(site, app_factory):
     assert kids(c)["Atari"]["state"] == "on"
 
 
-def test_sync_reports_its_total_size_and_what_is_left(site, app_factory):
+def test_sync_reports_its_total_size_and_what_is_left(site_factory, app_factory):
+    site = site_factory("sizes")                       # needs the sizes the site used to list
     c = app_factory(site)
     scan(c)
     select(c, "Atari/5200")

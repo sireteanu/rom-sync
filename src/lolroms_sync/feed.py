@@ -2,7 +2,8 @@
 ticked folders that haven't changed before a sync.
 
 The feed lists the most recently modified files (about 100-200, often less than a day's worth):
-each <item> has a ?file= link and a pubDate. It shows no sizes, no deletions and no renamed folders,
+each <item> has a link to the file (https://lolroms.com/SEGA/Mega%20Drive%20-%20Genesis/Name (World).7z;
+?file= links before November 2026) and a pubDate. It shows no sizes, no deletions and no renamed folders,
 so it is only a shortcut:
 
 - A ticked folder (a "root") may use it only if all of its changes since Rom Sync last knew its
@@ -24,7 +25,7 @@ import time
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from typing import Optional
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from .catalog import ancestors
 
@@ -53,8 +54,10 @@ def parse_feed(body: bytes) -> tuple:
     for it in channel.findall("item"):
         when = _epoch(it.findtext("pubDate"))
         link = it.findtext("link") or it.findtext("guid") or ""
-        path = next((v for k, v in parse_qsl(urlsplit(link.strip()).query) if k == "file"), None)
-        if when is None or not path:
+        u = urlsplit(link.strip())
+        path = next((v for k, v in parse_qsl(u.query) if k == "file"), None) or unquote(u.path)
+        path = path.strip("/")
+        if when is None or not path or "/" not in path and "." not in path:
             continue
         path = path.strip("/")
         items.append((path.rsplit("/", 1)[0] if "/" in path else "", when))

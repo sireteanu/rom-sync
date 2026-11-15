@@ -30,7 +30,10 @@ _UNITS = {"": 0, "b": 0, "byte": 0, "bytes": 0, "k": 1, "kb": 1, "kib": 1, "m": 
 
 # plan() actions
 NEW, RESUME, UPDATE, CHECK, SKIP, ADOPT = "new", "resume", "update", "check", "skip", "adopt"
-FETCH_ACTIONS = (NEW, RESUME, UPDATE, CHECK)
+# a file already in the folder that the listing gives no size for: ask the site for its size
+# (one HEAD request, nothing downloaded) before counting it as complete
+MEASURE = "measure"
+FETCH_ACTIONS = (NEW, RESUME, UPDATE, CHECK, MEASURE)
 
 
 @dataclass(frozen=True)
@@ -311,4 +314,6 @@ def plan(dest: str, rec: Optional[Record], info: FileInfo, *, check_remote: bool
         return UPDATE, f"newer on the site ({info.date})"
     if check_remote or (not info.date and not info.size):
         return CHECK, "asking the server whether it changed"
+    if not info.size:              # lolroms lists no sizes since November 2026
+        return MEASURE, "already in the folder - asking the site for its size"
     return ADOPT, "already in the folder"
